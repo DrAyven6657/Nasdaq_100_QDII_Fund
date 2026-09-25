@@ -1,5 +1,5 @@
 window.FUND_DATA = {
-  "updated": "2026-09-24 13:44:00",
+  "updated": "2026-09-25 13:38:25",
   "note": "溢价率 = (场内价 - 单位净值) / 单位净值 × 100%；QDII 净值为滞后净值（T+1/T+2），溢价仅供参考。代销额度=天天基金渠道，直销额度=基金公司官方渠道（公告解析，可能缺失）。",
   "funds": [
     {
@@ -149,7 +149,7 @@ window.FUND_DATA = {
       "otc_limit": null,
       "direct_status": null,
       "direct_limit": null,
-      "tracking_error": 1.04,
+      "tracking_error": 1.05,
       "fee_mgmt": 0.6,
       "fee_custodian": 0.2,
       "fee_sales": null,
@@ -479,7 +479,7 @@ window.FUND_DATA = {
       "otc_limit": null,
       "direct_status": "限大额",
       "direct_limit": "200元",
-      "tracking_error": 1.44,
+      "tracking_error": 1.45,
       "fee_mgmt": 0.5,
       "fee_custodian": 0.15,
       "fee_sales": 0.01,
@@ -633,7 +633,7 @@ window.FUND_DATA = {
       "otc_limit": "单日5元",
       "direct_status": "限大额",
       "direct_limit": "5元",
-      "tracking_error": 1.57,
+      "tracking_error": 1.58,
       "fee_mgmt": 0.5,
       "fee_custodian": 0.15,
       "fee_sales": 0.1,
@@ -875,7 +875,7 @@ window.FUND_DATA = {
       "otc_limit": null,
       "direct_status": null,
       "direct_limit": null,
-      "tracking_error": 1.19,
+      "tracking_error": 1.2,
       "fee_mgmt": 0.8,
       "fee_custodian": 0.2,
       "fee_sales": 0.0,
@@ -919,7 +919,7 @@ window.FUND_DATA = {
       "otc_limit": "单日100元",
       "direct_status": "限大额",
       "direct_limit": "1000元",
-      "tracking_error": 1.42,
+      "tracking_error": 1.43,
       "fee_mgmt": 1.0,
       "fee_custodian": 0.2,
       "fee_sales": 0.0,
@@ -952,15 +952,15 @@ window.FUND_DATA = {
   "index_quotes": {
     "纳指100": {
       "name": "纳斯达克100",
-      "price": 30282.19,
-      "change": -188.1,
-      "pct": -0.62
+      "price": 30589.44,
+      "change": 110.58,
+      "pct": 0.36
     },
     "标普500": {
       "name": "标普500",
-      "price": 7674.86,
-      "change": -31.17,
-      "pct": -0.4
+      "price": 7725.6,
+      "change": 21.47,
+      "pct": 0.28
     }
   }
 };
