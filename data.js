@@ -1,5 +1,5 @@
 window.FUND_DATA = {
-  "updated": "2026-10-09 13:39:54",
+  "updated": "2026-10-10 13:35:24",
   "note": "溢价率 = (场内价 - 单位净值) / 单位净值 × 100%；QDII 净值为滞后净值（T+1/T+2），溢价仅供参考。代销额度=天天基金渠道，直销额度=基金公司官方渠道（公告解析，可能缺失）。",
   "funds": [
     {
@@ -479,7 +479,7 @@ window.FUND_DATA = {
       "otc_limit": null,
       "direct_status": "限大额",
       "direct_limit": "200元",
-      "tracking_error": 1.45,
+      "tracking_error": 1.44,
       "fee_mgmt": 0.5,
       "fee_custodian": 0.15,
       "fee_sales": 0.01,
@@ -713,10 +713,10 @@ window.FUND_DATA = {
       "index": "纳指科技",
       "company": "景顺长城基金",
       "name": "纳指科技ETF景顺",
-      "nav": 2.3804,
-      "nav_date": "2026-09-29",
+      "nav": 2.393,
+      "nav_date": "2026-10-07",
       "price": 3.345,
-      "premium": 40.52,
+      "premium": 39.78,
       "otc_status": "场内交易",
       "otc_limit": null,
       "direct_status": null,
@@ -735,8 +735,8 @@ window.FUND_DATA = {
       "index": "纳指科技",
       "company": "景顺长城基金",
       "name": "景顺长城纳斯达克科技ETF联接(QDII)A人民币",
-      "nav": 2.9853,
-      "nav_date": "2026-09-29",
+      "nav": 3.0,
+      "nav_date": "2026-10-07",
       "price": null,
       "premium": null,
       "otc_status": "暂停申购",
@@ -757,8 +757,8 @@ window.FUND_DATA = {
       "index": "纳指科技",
       "company": "景顺长城基金",
       "name": "景顺长城纳斯达克科技ETF联接(QDII)E人民币",
-      "nav": 2.9641,
-      "nav_date": "2026-09-29",
+      "nav": 2.9786,
+      "nav_date": "2026-10-07",
       "price": null,
       "premium": null,
       "otc_status": "暂停申购",
@@ -875,7 +875,7 @@ window.FUND_DATA = {
       "otc_limit": null,
       "direct_status": null,
       "direct_limit": null,
-      "tracking_error": 1.2,
+      "tracking_error": 1.19,
       "fee_mgmt": 0.8,
       "fee_custodian": 0.2,
       "fee_sales": 0.0,
@@ -952,15 +952,15 @@ window.FUND_DATA = {
   "index_quotes": {
     "纳指100": {
       "name": "纳斯达克100",
-      "price": 30879.26,
-      "change": 153.45,
-      "pct": 0.5
+      "price": 30883.15,
+      "change": 157.34,
+      "pct": 0.51
     },
     "标普500": {
       "name": "标普500",
-      "price": 7792.2,
-      "change": 26.84,
-      "pct": 0.35
+      "price": 7811.54,
+      "change": 46.18,
+      "pct": 0.59
     }
   }
 };
