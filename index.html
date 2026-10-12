@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>纳指100 / 标普500 QDII 基金 · 额度与溢价监控</title>
+<title>纳指100 / 标普500 QDII 基金 · 场外额度监控</title>
 <style>
   :root {
     --bg: #f5f6f8; --card: #ffffff; --border: #e5e7eb; --text: #1f2937;
@@ -45,7 +45,7 @@
   thead th.no-sort { cursor: default; }
   tbody td { padding: 10px 12px; text-align: right; white-space: nowrap; border-bottom: 1px solid #f1f2f4; }
   tbody tr:hover { background: #f8fafc; }
-  /* 场内/场外分组标题行 */
+  /* 分组标题行 */
   tr.group-row td {
     background: #eef2ff; text-align: left; font-weight: 700; color: #3730a3;
     padding: 8px 12px; border-bottom: 1px solid #dbeafe; font-size: 13.5px; cursor: default;
@@ -60,6 +60,13 @@
   .limit { color: var(--up); font-weight: 600; }
   .status-pause { color: var(--up); font-weight: 600; }
   .status-open { color: var(--down); font-weight: 600; }
+  /* 近1年收益率 进度条 */
+  .ret-bar-wrap { position: relative; height: 22px; border-radius: 5px; overflow: hidden; background: #f3f4f6; min-width: 90px; }
+  .ret-bar-fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 5px;
+    background: linear-gradient(90deg, #fde6e6 0%, #f9b4b4 50%, #ef4444 100%); }
+  .ret-bar-fill.neg { background: linear-gradient(90deg, #e2f5e6 0%, #9fe0ab 50%, #16a34a 100%); }
+  .ret-bar-text { position: relative; z-index: 1; line-height: 22px; padding: 0 8px;
+    font-weight: 700; font-size: 12.5px; color: #111827; font-variant-numeric: tabular-nums; text-align: right; }
   .muted { color: var(--muted); }
   .sort-ind { color: var(--accent); font-size: 11px; }
   footer { text-align: center; color: var(--muted); font-size: 12px; margin-top: 20px; }
@@ -102,23 +109,16 @@
 <body>
 <div class="container">
   <header>
-    <h1>纳指100 / 标普500 QDII 基金 · 额度与溢价监控</h1>
-    <div class="sub">场内看溢价率，场外看申购额度</div>
+    <h1>纳指100 / 标普500 QDII 基金 · 场外额度监控</h1>
+    <div class="sub">场外指数基金（A 类）申购状态与限购额度</div>
   </header>
 
   <div class="note">
-    ⚠️ <b>溢价率 = (场内价 − 单位净值) ÷ 单位净值 × 100%</b>。QDII 净值为滞后净值（T+1/T+2），溢价仅供参考。
-    正溢价 → 场外申购（按净值）更划算；负溢价 → 场内买入更划算。<br>
-    <b>代销额度</b>=天天基金等第三方渠道（单日限购金额）。
+    <b>代销额度</b>=天天基金等第三方渠道（单日限购金额）。QDII 净值为滞后净值（T+1/T+2）。<br>
+    暂停申购的基金不显示限购金额（无法买入）。
   </div>
 
   <div class="toolbar">
-    <span class="grp">
-      <span class="lbl">位置</span>
-      <button data-filter="pos" data-val="all" class="active">全部</button>
-      <button data-filter="pos" data-val="场内">场内</button>
-      <button data-filter="pos" data-val="场外">场外</button>
-    </span>
     <span class="grp">
       <span class="lbl">指数</span>
       <button data-filter="idx" data-val="all" class="active">全部</button>
@@ -149,10 +149,10 @@
           <th class="left no-sort">基金名称</th>
           <th class="left no-sort">代码</th>
           <th class="left no-sort">指数</th>
-          <th data-sort="price">场内价</th>
           <th data-sort="nav">单位净值</th>
-          <th data-sort="premium">溢价率</th>
-          <th class="no-sort">代销额度</th>
+          <th data-sort="ret_1y">近1年</th>
+          <th class="no-sort">申购状态</th>
+          <th data-sort="otc_limit">代销额度</th>
           <th class="no-sort">跟踪误差</th>
           <th class="no-sort">费率(年)</th>
         </tr>
@@ -192,7 +192,7 @@
   </div>
 
   <footer>
-    数据来源：天天基金 / 腾讯行情，每日自动更新 · 溢价率分母为最新公布净值（滞后），仅供参考
+    数据来源：天天基金，每日自动更新 · 仅场外 A 类份额
   </footer>
 </div>
 
@@ -200,13 +200,11 @@
 <script src="kline_data.js"></script>
 <script>
 let DATA = [];
-let posFilter = 'all';        // all / 场内 / 场外
 let idxFilter = 'all';        // all / 纳指100 / 标普500 / 纳指科技
-let innerSortKey = 'premium';
-let innerSortAsc = false;
+let innerSortKey = 'otc_limit'; // 默认按申购额度排序
+let innerSortAsc = false;       // 默认从高到低
 
 const fmt = (v, d = '-') => (v === null || v === undefined || v === '') ? d : v;
-const fmtPrice = (v) => (v === null || v === undefined) ? '—' : v.toFixed(3);
 const fmtNav = (v) => (v === null || v === undefined) ? '—' : v.toFixed(4);
 
 function idxLabel(i) {
@@ -214,27 +212,28 @@ function idxLabel(i) {
   if (i === '纳指科技') return '<span class="tag idxtech">纳指科技</span>';
   return '<span class="tag idx100">纳指100</span>';
 }
-function premiumHtml(v) {
-  if (v === null || v === undefined) return '<span class="muted">—</span>';
-  const cls = v >= 0 ? 'pos' : 'neg';
-  return `<span class="premium ${cls}">${v > 0 ? '+' : ''}${v.toFixed(2)}%</span>`;
-}
 function otcQuota(f) {
   const s = f.otc_status || '', lim = f.otc_limit || '';
-  if (s.includes('暂不销售')) return '<span class="muted">暂不销售</span>';
   // 暂停申购：不能买，不显示残留的旧额度（避免误导）
   if (s.includes('暂停')) return '<span class="status-pause">暂停申购</span>';
-  if (s.includes('限大额') || s.includes('限额')) {
-    if (lim) return `<span class="limit">${lim}</span>`;
-    return '<span class="limit">限大额</span>';
-  }
-  if (s.includes('开放')) return '<span class="status-open">开放申购</span>';
-  if (s.includes('场内')) return '<span class="muted">场内品种</span>';
-  return s ? s : '<span class="muted">—</span>';
+  // 其余状态（限大额/开放/限额等）统一视为「可申购」，显示限购金额
+  if (lim) return `<span class="limit">${lim}</span>`;
+  return '<span class="muted">—</span>';
 }
 function trackingError(v) {
   if (v === null || v === undefined) return '<span class="muted">—</span>';
   return `<span>${v.toFixed(2)}%</span>`;
+}
+function ret1yHtml(v, idx) {
+  if (v === null || v === undefined) return '<span class="muted">—</span>';
+  // 满格基准：按指数分类取各自的最大绝对值（纳指科技不参与）
+  const pool = idx === '纳指科技' ? [] : DATA.filter(f => f.index === idx);
+  const vals = pool.map(f => f.ret_1y).filter(x => x !== null && x !== undefined);
+  const maxAbs = vals.length ? Math.max(...vals.map(x => Math.abs(x)), 1) : 1;
+  const pct = Math.min(Math.abs(v) / maxAbs * 100, 100).toFixed(1);
+  const neg = v < 0;
+  const txt = `${v > 0 ? '+' : ''}${v.toFixed(2)}%`;
+  return `<div class="ret-bar-wrap"><div class="ret-bar-fill${neg ? ' neg' : ''}" style="width:${pct}%"></div><div class="ret-bar-text">${txt}</div></div>`;
 }
 function feeCell(f) {
   const mgmt = f.fee_mgmt, cust = f.fee_custodian, buy = f.fee_buy, sales = f.fee_sales;
@@ -250,15 +249,32 @@ function feeCell(f) {
 
 function matchFilter(f) {
   if (idxFilter !== 'all' && f.index !== idxFilter) return false;
-  if (posFilter === '场内' && !f.market) return false;
-  if (posFilter === '场外' && f.market) return false;
   return true;
 }
 
 const idxOrder = { '纳指100': 0, '标普500': 1, '纳指科技': 2 };
 function byIdx(a, b) { return (idxOrder[a.index] ?? 9) - (idxOrder[b.index] ?? 9); }
+
+// 解析限购金额为数值（"10元"→10，"100元"→100，"1万元"→10000），无法解析返回 -1
+function limitToNum(s) {
+  if (!s) return -1;
+  const m = String(s).match(/(\d+(?:\.\d+)?)\s*(万|元)?/);
+  if (!m) return -1;
+  let n = parseFloat(m[1]);
+  if (m[2] === '万') n *= 10000;
+  return n;
+}
+
 function innerCompare(a, b) {
-  let va = a[innerSortKey], vb = b[innerSortKey];
+  let va, vb;
+  if (innerSortKey === 'otc_limit') {
+    // 额度排序：转成数值比较（"10元"→10，"1万元"→10000）
+    va = limitToNum(a.otc_limit);
+    vb = limitToNum(b.otc_limit);
+  } else {
+    va = a[innerSortKey];
+    vb = b[innerSortKey];
+  }
   if (va === null || va === undefined) va = -Infinity;
   if (vb === null || vb === undefined) vb = -Infinity;
   if (typeof va === 'string') return innerSortAsc ? va.localeCompare(vb, 'zh') : vb.localeCompare(va, 'zh');
@@ -266,14 +282,17 @@ function innerCompare(a, b) {
 }
 
 function rowHtml(f) {
+  const status = f.otc_status || '';
+  const statusCell = status.includes('暂停') ? '<span class="status-pause">暂停申购</span>'
+    : '<span class="status-open">可申购</span>';
   return `
     <tr>
       <td class="left name">${fmt(f.name)}</td>
       <td class="left code">${f.code}</td>
       <td class="left">${idxLabel(f.index)}</td>
-      <td>${fmtPrice(f.price)}</td>
       <td>${fmtNav(f.nav)}<div class="muted" style="font-size:11px">${fmt(f.nav_date, '')}</div></td>
-      <td>${premiumHtml(f.premium)}</td>
+      <td>${ret1yHtml(f.ret_1y, f.index)}</td>
+      <td>${statusCell}</td>
       <td>${otcQuota(f)}</td>
       <td>${trackingError(f.tracking_error)}</td>
       <td>${feeCell(f)}</td>
@@ -283,25 +302,17 @@ function rowHtml(f) {
 function render() {
   const filtered = DATA.filter(matchFilter);
 
-  const onExchange = filtered.filter(f => f.market);   // 场内：ETF/LOF
-  const otc = filtered.filter(f => !f.market);         // 场外：指数基金
-
-  // 场内：指数 → 溢价率降序；场外：指数 → 公司
-  onExchange.sort((a, b) => byIdx(a, b) || ((b.premium ?? -Infinity) - (a.premium ?? -Infinity)));
-  otc.sort((a, b) => byIdx(a, b) || (a.company || '').localeCompare(b.company || '', 'zh'));
+  // 排序：暂停申购的始终排最后；其余按 innerSortKey 排序（默认额度从高到低）
+  filtered.sort((a, b) => {
+    const pa = (a.otc_status || '').includes('暂停');
+    const pb = (b.otc_status || '').includes('暂停');
+    if (pa !== pb) return pa ? 1 : -1;      // 暂停申购的排最后
+    return innerCompare(a, b);
+  });
 
   let html = '';
-  const showField = posFilter !== '场外';   // 全部 / 场内
-  const showOtc = posFilter !== '场内';     // 全部 / 场外
-
-  if (showField) {
-    html += `<tr class="group-row"><td colspan="9">▍场内 · ETF / LOF（二级市场买入，看溢价）</td></tr>`;
-    html += onExchange.map(rowHtml).join('');
-  }
-  if (showOtc) {
-    html += `<tr class="group-row otc"><td colspan="9">▍场外 · 指数基金（按净值申购，看额度）</td></tr>`;
-    html += otc.map(rowHtml).join('');
-  }
+  html += `<tr class="group-row otc"><td colspan="9">▍场外 · 指数基金（按净值申购，看额度）</td></tr>`;
+  html += filtered.map(rowHtml).join('');
 
   const tbody = document.querySelector('#tbl tbody');
   tbody.innerHTML = html || '<tr><td colspan="9" style="text-align:center;padding:30px" class="muted">没有符合条件的基金</td></tr>';
@@ -322,7 +333,7 @@ document.querySelectorAll('.toolbar button[data-filter]').forEach(btn => {
     const kind = btn.dataset.filter, val = btn.dataset.val;
     document.querySelectorAll(`.toolbar button[data-filter="${kind}"]`).forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
-    if (kind === 'pos') posFilter = val; else idxFilter = val;
+    if (kind === 'idx') idxFilter = val;
     render();
   });
 });

@@ -5,10 +5,9 @@
 ================================================
 
 数据源（均免费、无需登录）：
-  1. 场内价      腾讯行情 qt.gtimg.cn（批量，GBK 编码）
-  2. 净值/名称/申购费 天天基金 pingzhongdata（Data_netWorthTrend 末条为最新净值）
-  3. 申购状态/限购金额/跟踪误差  天天基金基金详情页 HTML
-  4. 管理费/托管费/销售服务费   天天基金基金概况页（f10 jbgk）
+  1. 净值/名称/申购费 天天基金 pingzhongdata（Data_netWorthTrend 末条为最新净值）
+  2. 申购状态/限购金额/跟踪误差  天天基金基金详情页 HTML
+  3. 管理费/托管费/销售服务费   天天基金基金概况页（f10 jbgk）
 
 输出：data.json（供 index.html 渲染）
 
@@ -26,26 +25,9 @@ import os
 #   市场：'sh' 沪市 / 'sz' 深市 / None 场外（无场内交易）
 #   类型：'ETF' / 'LOF' / '场外'
 #   指数：'纳指100' / '标普500' / '纳指科技'
-#   场内 ETF/LOF 全保留；场外仅保留 A 类份额（去掉 C/D/E/F/I 类）
+#   仅保留场外 A 类份额（已去掉场内 ETF/LOF 及 C/D/E/F/I 类份额）
 FUNDS = [
-    # ================= 纳斯达克100 =================
-    # ---- ETF（场内可交易）----
-    ("513100", "sh", "ETF", "纳指100", "国泰基金"),
-    ("513300", "sh", "ETF", "纳指100", "华夏基金"),
-    ("513390", "sh", "ETF", "纳指100", "博时基金"),
-    ("513110", "sh", "ETF", "纳指100", "华泰柏瑞基金"),
-    ("513870", "sh", "ETF", "纳指100", "富国基金"),
-    ("159941", "sz", "ETF", "纳指100", "广发基金"),
-    ("159632", "sz", "ETF", "纳指100", "华安基金"),
-    ("159659", "sz", "ETF", "纳指100", "招商基金"),
-    ("159513", "sz", "ETF", "纳指100", "大成基金"),
-    ("159501", "sz", "ETF", "纳指100", "嘉实基金"),
-    ("159660", "sz", "ETF", "纳指100", "汇添富基金"),
-    ("159696", "sz", "ETF", "纳指100", "易方达基金"),
-    # ---- LOF（场内+场外）----
-    ("160213", "sz", "LOF", "纳指100", "国泰基金"),
-    ("161130", "sz", "LOF", "纳指100", "易方达基金"),
-    # ---- 场外指数基金（仅 A 类）----
+    # ================= 纳斯达克100（场外 A 类） =================
     ("270042", None, "场外", "纳指100", "广发基金"),
     ("040046", None, "场外", "纳指100", "华安基金"),
     ("000834", None, "场外", "纳指100", "大成基金"),
@@ -58,20 +40,9 @@ FUNDS = [
     ("019547", None, "场外", "纳指100", "招商基金"),
     ("019441", None, "场外", "纳指100", "万家基金"),
     ("019736", None, "场外", "纳指100", "宝盈基金"),
-    # ================= 纳指科技 =================
-    # ---- ETF（追踪纳斯达克科技市值加权指数）----
-    ("159509", "sz", "ETF", "纳指科技", "景顺长城基金"),
-    # ---- 场外联接基金（仅 A 类）----
+    # ================= 纳指科技（场外 A 类） =================
     ("017091", None, "场外", "纳指科技", "景顺长城基金"),
-    # ================= 标普500 =================
-    # ---- ETF（场内可交易）----
-    ("513500", "sh", "ETF", "标普500", "博时基金"),
-    ("513650", "sh", "ETF", "标普500", "南方基金"),
-    ("159612", "sz", "ETF", "标普500", "国泰基金"),
-    ("159655", "sz", "ETF", "标普500", "华夏基金"),
-    # ---- LOF（场内+场外）----
-    ("161125", "sz", "LOF", "标普500", "易方达基金"),
-    # ---- 场外指数基金（仅 A 类）----
+    # ================= 标普500（场外 A 类） =================
     ("050025", None, "场外", "标普500", "博时基金"),
     ("018064", None, "场外", "标普500", "华夏基金"),
     ("096001", None, "场外", "标普500", "大成基金"),
@@ -98,33 +69,6 @@ def fetch(url, referer="https://fund.eastmoney.com/", retry=3, raw=False):
     raise RuntimeError(f"请求失败 {url}: {last_err}")
 
 
-# ---------------------------------------------------------------- 场内价
-def fetch_quotes(codes):
-    """腾讯行情批量拿场内现价。codes: [(code, market)] -> {code: price}"""
-    result = {}
-    if not codes:
-        return result
-    symbol = ",".join(f"{m}{c}" for c, m in codes)
-    try:
-        raw = fetch(f"https://qt.gtimg.cn/q={symbol}", referer="https://gu.qq.com/", raw=True)
-        text = raw.decode("gbk", errors="replace")
-        for line in text.strip().split(";"):
-            line = line.strip()
-            if "=" not in line:
-                continue
-            var, val = line.split("=", 1)
-            f = val.strip('"').split("~")
-            if len(f) > 4:
-                code = var.replace("v_sh", "").replace("v_sz", "")
-                try:
-                    result[code] = float(f[3])
-                except ValueError:
-                    result[code] = None
-    except Exception as e:  # noqa
-        print(f"  [警告] 场内行情获取失败: {e}")
-    return result
-
-
 # ---------------------------------------------------------------- 净值/名称/申购费
 def fetch_nav(code):
     """从 pingzhongdata 拿最新单位净值 + 净值日期 + 名称 + 申购费率。返回 dict 或 None。"""
@@ -133,6 +77,7 @@ def fetch_nav(code):
     name = None
     nav = None
     nav_date = None
+    ret_1y = None
     fee_buy = None
     fee_buy_orig = None
     m = re.search(r'var fS_name = "([^"]+)"', js)
@@ -165,13 +110,25 @@ def fetch_nav(code):
                 ts = last.get("x")
                 if ts:
                     nav_date = datetime.datetime.fromtimestamp(ts / 1000).strftime("%Y-%m-%d")
+                # 近一年收益率：往前找约 365 天前最近的一个净值
+                try:
+                    target = last.get("x") - 365 * 24 * 3600 * 1000
+                    prev = None
+                    for it in arr:  # 顺序遍历，找第一个 >= target 的净值
+                        if it.get("x") >= target:
+                            prev = it.get("y")
+                            break
+                    if prev and nav:
+                        ret_1y = round((nav - prev) / prev * 100, 2)
+                except Exception:
+                    ret_1y = None
         except Exception:
             nav = None
     if nav is None:
         return None
     return {
         "code": code, "name": name, "nav": float(nav), "nav_date": nav_date,
-        "fee_buy": fee_buy, "fee_buy_orig": fee_buy_orig,
+        "fee_buy": fee_buy, "fee_buy_orig": fee_buy_orig, "ret_1y": ret_1y,
     }
 
 
@@ -375,12 +332,7 @@ def write_kline_data():
 # ---------------------------------------------------------------- 主流程
 def main():
     start = time.time()
-    print(f"[{datetime.datetime.now():%Y-%m-%d %H:%M:%S}] 开始抓取 {len(FUNDS)} 只基金...")
-
-    # 1) 场内价（仅 ETF/LOF）
-    trade_codes = [(c, m) for c, m, t, i, comp in FUNDS if m]
-    quotes = fetch_quotes(trade_codes)
-    print(f"  场内行情: {len(quotes)}/{len(trade_codes)} 只获取成功")
+    print(f"[{datetime.datetime.now():%Y-%m-%d %H:%M:%S}] 开始抓取 {len(FUNDS)} 只场外基金...")
 
     funds = []
     for code, market, ftype, index, company in FUNDS:
@@ -393,8 +345,7 @@ def main():
             "name": None,
             "nav": None,
             "nav_date": None,
-            "price": None,
-            "premium": None,
+            "ret_1y": None,          # 近一年收益率 %
             "otc_status": None,      # 代销状态（天天基金）
             "otc_limit": None,       # 代销限额
             "tracking_error": None,  # 年化跟踪误差 %
@@ -404,13 +355,14 @@ def main():
             "fee_buy": None,         # 申购费(优惠) %
             "fee_buy_orig": None,    # 申购费(原) %
         }
-        # 净值 + 名称 + 申购费
+        # 净值 + 名称 + 申购费 + 近一年收益率
         try:
             nav_info = fetch_nav(code)
             if nav_info:
                 item["name"] = nav_info["name"]
                 item["nav"] = nav_info["nav"]
                 item["nav_date"] = nav_info["nav_date"]
+                item["ret_1y"] = nav_info["ret_1y"]
                 item["fee_buy"] = nav_info["fee_buy"]
                 item["fee_buy_orig"] = nav_info["fee_buy_orig"]
             else:
@@ -418,16 +370,8 @@ def main():
         except Exception as e:  # noqa
             print(f"  [错误] {code} 净值: {e}")
 
-        # 场内价
-        if market:
-            item["price"] = quotes.get(code)
-
-        # 溢价率（仅场内可交易且有净值+现价）
-        if item["nav"] and item["price"]:
-            item["premium"] = round((item["price"] - item["nav"]) / item["nav"] * 100, 2)
-
         # 场外申购状态/限购（代销）+ 跟踪误差
-        detail = fetch_detail(code, is_otc=(not market))
+        detail = fetch_detail(code, is_otc=True)
         item["otc_status"] = detail["otc_status"]
         item["otc_limit"] = detail["otc_limit"]
         item["tracking_error"] = detail["tracking_error"]
@@ -439,7 +383,7 @@ def main():
         item["fee_sales"] = fees["fee_sales"]
 
         # 场外基金：暂停申购超过3个月（90天）则无参考价值，跳过
-        if not market and item["otc_status"] and "暂停" in item["otc_status"]:
+        if item["otc_status"] and "暂停" in item["otc_status"]:
             pause_date = fetch_pause_date(code)
             if pause_date:
                 try:
@@ -461,7 +405,7 @@ def main():
         try:
             old = json.load(open(OUT_FILE, encoding="utf-8"))
             old_map = {f["code"]: f for f in old.get("funds", [])}
-            fields = ("name", "nav", "nav_date", "price", "premium",
+            fields = ("name", "nav", "nav_date", "ret_1y",
                       "otc_status", "otc_limit",
                       "tracking_error", "fee_mgmt", "fee_custodian", "fee_sales",
                       "fee_buy", "fee_buy_orig")
@@ -496,7 +440,7 @@ def main():
 
     out = {
         "updated": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "note": "溢价率 = (场内价 - 单位净值) / 单位净值 × 100%；QDII 净值为滞后净值（T+1/T+2），溢价仅供参考。代销额度=天天基金渠道。",
+        "note": "QDII 净值为滞后净值（T+1/T+2）。代销额度=天天基金渠道（单日限购金额）。",
         "funds": funds,
         "index_quotes": index_quotes,
     }
