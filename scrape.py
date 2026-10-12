@@ -311,55 +311,59 @@ def fetch_index_quotes():
 
 
 # ---------------------------------------------------------------- 指数日K（kline_data.js）
-KLINE_CHUNK = 2000  # 单次抓取根数（接口上限约 2000）
+# 数据源：雅虎财经 chart API（^NDX=纳指100，^GSPC=标普500）。可回溯到指数发布之初
+# （纳指100 1985 年、标普500 1970 年）。腾讯 us.NDX 只到 2000 年，故弃用。
 KLINE_OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "kline_data.js")
+KLINE_YAHOO = {
+    "纳指100": "%5ENDX",   # ^NDX
+    "标普500": "%5EGSPC",  # ^GSPC
+}
 
 
-def fetch_all_kline(symbol):
-    """分页抓取全部日K（自上市以来），返回按日期升序的 rows 列表。"""
-    batches = []
-    end = "2050-01-01"
-    while True:
-        url = (
-            "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get"
-            f"?param={symbol},day,1970-01-01,{end},{KLINE_CHUNK},qfq"
-        )
-        try:
-            js = fetch(url, referer="https://gu.qq.com/")
-            data = json.loads(js)
-            day = (data.get("data") or {}).get(symbol, {}).get("day") or []
-        except Exception as e:  # noqa
-            print(f"  [警告] {symbol} K线分页失败: {e}")
-            break
-        if not day:
-            break
-        batches.append(day)
-        if len(day) < KLINE_CHUNK:
-            break
-        end = day[0][0]
-        time.sleep(0.3)
+def fetch_all_kline(yahoo_code):
+    """从雅虎 chart API 抓取全部日K（自发布以来），返回按日期升序的 rows 列表。"""
+    url = (
+        "https://query1.finance.yahoo.com/v8/finance/chart/"
+        f"{yahoo_code}?period1=0&period2=9999999999&interval=1d"
+    )
+    try:
+        data = json.loads(fetch(url))
+    except Exception as e:  # noqa
+        print(f"  [警告] {yahoo_code} K线抓取失败: {e}")
+        return []
+    result = (data.get("chart") or {}).get("result") or []
+    if not result:
+        return []
+    r = result[0]
+    ts = r.get("timestamp") or []
+    q = ((r.get("indicators") or {}).get("quote") or [{}])[0]
+    o = q.get("open") or []
+    c = q.get("close") or []
+    h = q.get("high") or []
+    l = q.get("low") or []
+    v = q.get("volume") or []
     rows = []
-    seen = set()
-    for batch in reversed(batches):
-        for r in batch:
-            if len(r) < 6 or r[0] in seen:
-                continue
-            seen.add(r[0])
-            try:
-                rows.append({
-                    "d": r[0], "o": float(r[1]), "c": float(r[2]),
-                    "h": float(r[3]), "l": float(r[4]), "v": float(r[5]),
-                })
-            except (ValueError, TypeError):
-                continue
+    for i, t in enumerate(ts):
+        if c[i] is None:  # 跳过停牌/无成交日
+            continue
+        d = datetime.datetime.fromtimestamp(t, datetime.timezone.utc).strftime("%Y-%m-%d")
+        rows.append({
+            "d": d,
+            "o": round(float(o[i]), 2) if o[i] is not None else None,
+            "c": round(float(c[i]), 2),
+            "h": round(float(h[i]), 2) if h[i] is not None else None,
+            "l": round(float(l[i]), 2) if l[i] is not None else None,
+            "v": float(v[i]) if v[i] is not None else 0.0,
+        })
     return rows
 
 
 def write_kline_data():
     """抓取纳指100/标普500 全部日K，写入 kline_data.js（供 index.html / kline.html 加载）。"""
     out = {}
-    for name, sym in INDEX_QUOTES.items():
-        out[name] = fetch_all_kline(sym)
+    for name, yahoo_code in KLINE_YAHOO.items():
+        out[name] = fetch_all_kline(yahoo_code)
+        time.sleep(0.5)
     if not any(out.values()):
         return  # 抓取失败，保留旧文件
     payload = json.dumps(out, ensure_ascii=False, separators=(",", ":"))

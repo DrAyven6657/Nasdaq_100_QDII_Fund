@@ -27,9 +27,6 @@
 | 场外申购状态 / 限购金额（代销）/ 跟踪误差 | 天天基金基金详情页 HTML |
 | 管理费 / 托管费 / 销售服务费 | 天天基金基金概况页 `fundf10/jbgk_{code}.html` |
 
-## 直接访问
-https://drayven6657.github.io/Nasdaq_100_QDII_Fund/
-
 ## 本地运行（Windows 双击即用）
 
 最简单：双击 **`启动.bat`**，会自动更新数据并在浏览器里打开最新结果。
@@ -44,7 +41,30 @@ python scrape.py      # 抓取数据，生成 data.json 和 data.js
 然后直接用浏览器打开 `index.html` 即可（数据通过 `data.js` 以 `<script>`
 方式加载，`file://` 协议下也能正常显示，无需本地 HTTP 服务）。
 
+## 部署到 GitHub Pages（免费、每日自动更新）
 
+1. 在 GitHub 新建一个仓库（例如 `nasdaq100-fund-monitor`）。
+2. 把本项目推上去：
+
+   ```bash
+   git init
+   git add .
+   git commit -m "init"
+   git branch -M main
+   git remote add origin https://github.com/<你的用户名>/nasdaq100-fund-monitor.git
+   git push -u origin main
+   ```
+
+3. 打开仓库 **Settings → Pages**，Source 选 **Deploy from a branch**，
+   分支选 `main`、目录选 `/ (root)`，保存。稍等 1–2 分钟即可通过
+   `https://<你的用户名>.github.io/nasdaq100-fund-monitor/` 访问。
+
+4. **每日自动更新**：`.github/workflows/update.yml` 已配置为每天
+   **北京时间 21:15** 自动运行 `scrape.py` 并提交 `data.json`，Pages 随即重发布。
+   也可在 Actions 页面手动触发（Run workflow）。
+
+   > 说明：GitHub Actions 免费版每月有额度，但每天跑一次完全够用。
+   > cron 为 UTC 时间，改动时间请换算（北京时间 = UTC + 8）。
 
 ## 维护基金清单
 

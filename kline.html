@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>纳指100 / 标普500 日K线</title>
+<style>
+  :root {
+    --bg: #f5f6f8; --card: #ffffff; --border: #e5e7eb; --text: #1f2937; --muted: #6b7280;
+    --up: #dc2626; --down: #16a34a;
+    --ma5: #f59e0b; --ma10: #2563eb; --ma20: #7c3aed;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif;
+    background: var(--bg); color: var(--text); line-height: 1.5; padding: 24px 16px 60px; }
+  .container { max-width: 1080px; margin: 0 auto; }
+  header h1 { font-size: 20px; font-weight: 700; margin-bottom: 4px; }
+  header .sub { color: var(--muted); font-size: 13px; margin-bottom: 16px; }
+  .chart-block { background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+    padding: 14px 16px 8px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,.04); }
+  .chart-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px 16px; margin-bottom: 6px; }
+  .chart-title { font-size: 15px; font-weight: 700; }
+  .chart-price { font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .chart-price.up { color: var(--up); } .chart-price.down { color: var(--down); }
+  .chart-chg { font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .chart-chg.up { color: var(--up); } .chart-chg.down { color: var(--down); }
+  .legend { display: inline-flex; gap: 12px; font-size: 12px; color: var(--muted); margin-left: auto; }
+  .legend i { display: inline-block; width: 14px; height: 3px; border-radius: 2px; vertical-align: middle; margin-right: 4px; }
+  .range { display: inline-flex; gap: 4px; flex-wrap: wrap; }
+  .range button { border: 1px solid var(--border); background: #fff; color: var(--text);
+    padding: 2px 9px; border-radius: 6px; cursor: pointer; font-size: 12px; }
+  .range button.active { background: var(--text); color: #fff; border-color: var(--text); }
+  .chart-wrap { position: relative; }
+  .chart-wrap svg { display: block; width: 100%; height: auto; }
+  .tip { position: absolute; pointer-events: none; background: rgba(17,24,39,.92); color: #fff;
+    border-radius: 6px; padding: 6px 9px; font-size: 12px; line-height: 1.5; display: none; z-index: 5;
+    white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .tip .row { display: flex; justify-content: space-between; gap: 12px; }
+  .tip .lb { color: #9ca3af; }
+  footer { text-align: center; color: var(--muted); font-size: 12px; margin-top: 16px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <h1>纳指100 / 标普500 日K线</h1>
+    <div class="sub">数据源：腾讯行情（US 市场），日K · 红涨绿跌 · 悬停看开高低收 · 长区间自动聚合显示</div>
+  </header>
+
+  <div class="chart-block" data-idx="纳指100">
+    <div class="chart-head">
+      <span class="chart-title">纳斯达克100</span>
+      <span class="chart-price" id="price-纳指100">—</span>
+      <span class="chart-chg" id="chg-纳指100">—</span>
+      <span class="legend">
+        <span><i style="background:var(--ma5)"></i>MA5 <b id="ma5-纳指100">—</b></span>
+        <span><i style="background:var(--ma10)"></i>MA10 <b id="ma10-纳指100">—</b></span>
+        <span><i style="background:var(--ma20)"></i>MA20 <b id="ma20-纳指100">—</b></span>
+      </span>
+      <span class="range" id="range-纳指100"></span>
+    </div>
+    <div class="chart-wrap" id="wrap-纳指100"></div>
+  </div>
+
+  <div class="chart-block" data-idx="标普500">
+    <div class="chart-head">
+      <span class="chart-title">标普500</span>
+      <span class="chart-price" id="price-标普500">—</span>
+      <span class="chart-chg" id="chg-标普500">—</span>
+      <span class="legend">
+        <span><i style="background:var(--ma5)"></i>MA5 <b id="ma5-标普500">—</b></span>
+        <span><i style="background:var(--ma10)"></i>MA10 <b id="ma10-标普500">—</b></span>
+        <span><i style="background:var(--ma20)"></i>MA20 <b id="ma20-标普500">—</b></span>
+      </span>
+      <span class="range" id="range-标普500"></span>
+    </div>
+    <div class="chart-wrap" id="wrap-标普500"></div>
+  </div>
+
+  <footer>日K数据由 kline_data.py 生成（kline_data.js），双击本页需先运行该脚本刷新数据</footer>
+</div>
+
+<script src="kline_data.js"></script>
+<script>
+const KDATA = window.KLINE_DATA || {};
+const UP = '#dc2626', DOWN = '#16a34a';
+const MAX_POINTS = 1000;  // 超过则聚合，保证渲染流畅
+const RANGES = [
+  { label: '近1月', days: 22 },
+  { label: '3月', days: 66 },
+  { label: '半年', days: 126 },
+  { label: '1年', days: 252 },
+  { label: '3年', days: 756 },
+  { label: '5年', days: 1260 },
+  { label: '10年', days: 2520 },
+  { label: '成立来', days: 0 },
+];
+const DEFAULT_RANGE = 126;
+const MA = { ma5: { n: 5, color: '#f59e0b' }, ma10: { n: 10, color: '#2563eb' }, ma20: { n: 20, color: '#7c3aed' } };
+
+function fmtNum(v, d) {
+  return v.toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
+}
+
+function calcMA(rows, n) {
+  const out = new Array(rows.length).fill(null);
+  let sum = 0;
+  for (let i = 0; i < rows.length; i++) {
+    sum += rows[i].c;
+    if (i >= n) sum -= rows[i - n].c;
+    if (i >= n - 1) out[i] = sum / n;
+  }
+  return out;
+}
+
+// 把多根日K聚合成一根（保留首开/末收/最高/最低/量合计），用于超长区间
+function aggregate(rows, maxPoints) {
+  if (rows.length <= maxPoints) return rows;
+  const bucket = Math.ceil(rows.length / maxPoints);
+  const out = [];
+  for (let i = 0; i < rows.length; i += bucket) {
+    const c = rows.slice(i, i + bucket);
+    out.push({
+      d: c[0].d, o: c[0].o, c: c[c.length - 1].c,
+      h: Math.max(...c.map(r => r.h)), l: Math.min(...c.map(r => r.l)),
+      v: c.reduce((s, r) => s + r.v, 0),
+    });
+  }
+  return out;
+}
+function downsampleLast(arr, bucket) {
+  const out = [];
+  for (let i = 0; i < arr.length; i += bucket) out.push(arr[Math.min(i + bucket - 1, arr.length - 1)]);
+  return out;
+}
+
+function renderChart(idx, rangeDays) {
+  const rows = KDATA[idx] || [];
+  const wrap = document.getElementById('wrap-' + idx);
+  if (!wrap) return;
+  if (!rows || !rows.length) { wrap.innerHTML = '<div style="padding:20px;text-align:center;color:#9ca3af">暂无数据</div>'; return; }
+
+  // 切片
+  let data = rangeDays > 0 ? rows.slice(-rangeDays) : rows.slice();
+  const startIdx = rows.length - data.length;
+  const maFull = { ma5: calcMA(rows, 5), ma10: calcMA(rows, 10), ma20: calcMA(rows, 20) };
+  let ma = { ma5: maFull.ma5.slice(startIdx), ma10: maFull.ma10.slice(startIdx), ma20: maFull.ma20.slice(startIdx) };
+
+  // 聚合（超长区间）
+  if (data.length > MAX_POINTS) {
+    const bucket = Math.ceil(data.length / MAX_POINTS);
+    data = aggregate(data, MAX_POINTS);
+    ma.ma5 = downsampleLast(ma.ma5, bucket);
+    ma.ma10 = downsampleLast(ma.ma10, bucket);
+    ma.ma20 = downsampleLast(ma.ma20, bucket);
+  }
+  const n = data.length;
+
+  // 尺寸（viewBox）
+  const W = 980, H = 460;
+  const padL = 12, padR = 66, padT = 12, padB = 24;
+  const volH = 86, gap = 14;
+  const priceH = H - padT - padB - volH - gap;
+  const plotW = W - padL - padR;
+  const step = plotW / n;
+  const cw = Math.max(1, step * 0.62);
+  const x = i => padL + step * (i + 0.5);
+
+  // 价格区间（含均线）
+  const allVals = data.flatMap(r => [r.h, r.l]);
+  for (const k of ['ma5', 'ma10', 'ma20']) for (const v of ma[k]) if (v !== null) allVals.push(v);
+  const minL = Math.min(...allVals), maxH = Math.max(...allVals);
+  const pad = (maxH - minL) * 0.06 || 1;
+  const yMax = maxH + pad, yMin = minL - pad;
+  const y = p => padT + (yMax - p) / (yMax - yMin) * priceH;
+
+  const maxV = Math.max(...data.map(r => r.v)) || 1;
+  const volTop = padT + priceH + gap;
+  const vy = v => volTop + (1 - v / maxV) * volH;
+
+  let svg = '';
+  // 网格 + 价格刻度
+  const gridN = 5;
+  for (let g = 0; g <= gridN; g++) {
+    const p = yMin + (yMax - yMin) * g / gridN;
+    const yy = y(p);
+    svg += `<line x1="${padL}" y1="${yy.toFixed(1)}" x2="${W - padR}" y2="${yy.toFixed(1)}" stroke="${g === 0 || g === gridN ? '#e5e7eb' : '#f1f2f4'}" stroke-width="0.6"/>`;
+    svg += `<text x="${W - padR + 4}" y="${(yy + 3).toFixed(1)}" font-size="10" fill="#9ca3af">${fmtNum(p, p >= 1000 ? 0 : 2)}</text>`;
+  }
+  // 成交量
+  data.forEach((r, i) => {
+    const color = r.c >= r.o ? UP : DOWN;
+    const vh = Math.max(1, (r.v / maxV) * volH);
+    svg += `<rect x="${(x(i) - cw / 2).toFixed(1)}" y="${vy(r.v).toFixed(1)}" width="${cw.toFixed(1)}" height="${vh.toFixed(1)}" fill="${color}" opacity="0.55"/>`;
+  });
+  // K线
+  data.forEach((r, i) => {
+    const up = r.c >= r.o;
+    const color = up ? UP : DOWN;
+    const cx = x(i).toFixed(1);
+    svg += `<line x1="${cx}" y1="${y(r.h).toFixed(1)}" x2="${cx}" y2="${y(r.l).toFixed(1)}" stroke="${color}" stroke-width="1"/>`;
+    const yTop = y(Math.max(r.o, r.c)).toFixed(1), yBot = y(Math.min(r.o, r.c)).toFixed(1);
+    const bodyH = Math.max(1, yBot - yTop);
+    svg += `<rect x="${(x(i) - cw / 2).toFixed(1)}" y="${yTop}" width="${cw.toFixed(1)}" height="${bodyH.toFixed(1)}" fill="${up ? color : '#fff'}" stroke="${color}" stroke-width="1"/>`;
+  });
+  // 均线
+  for (const key of ['ma5', 'ma10', 'ma20']) {
+    let d = '', started = false;
+    for (let i = 0; i < n; i++) {
+      if (ma[key][i] === null) continue;
+      d += (started ? ' ' : '') + `L${x(i).toFixed(1)},${y(ma[key][i]).toFixed(1)}`;
+      started = true;
+    }
+    if (started) svg += `<path d="M${d.slice(1)}" fill="none" stroke="${MA[key].color}" stroke-width="1.2"/>`;
+  }
+  // 日期刻度
+  for (let g = 0; g <= 4; g++) {
+    const i = Math.round((n - 1) * g / 4);
+    svg += `<text x="${x(i).toFixed(1)}" y="${H - 6}" text-anchor="${g === 0 ? 'start' : g === 4 ? 'end' : 'middle'}" font-size="10" fill="#9ca3af">${data[i].d.slice(2)}</text>`;
+  }
+
+  wrap.innerHTML = `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" id="svg-${idx}">${svg}<line id="cross-${idx}" x1="0" y1="${padT}" x2="0" y2="${H - padB}" stroke="#9ca3af" stroke-width="0.8" stroke-dasharray="3,3" opacity="0"/></svg>` +
+    `<div class="tip" id="tip-${idx}"></div>`;
+
+  // 头部最新价/涨跌/均线（始终取最新一天）
+  const last = rows[rows.length - 1], prev = rows[rows.length - 2];
+  const chg = prev ? last.c - prev.c : 0;
+  const up = chg >= 0, cls = up ? 'up' : 'down';
+  const priceEl = document.getElementById('price-' + idx);
+  const chgEl = document.getElementById('chg-' + idx);
+  priceEl.textContent = fmtNum(last.c, 2);
+  priceEl.className = 'chart-price ' + cls;
+  chgEl.textContent = `${up ? '+' : ''}${chg.toFixed(2)} (${up ? '+' : ''}${(prev ? chg / prev.c * 100 : 0).toFixed(2)}%)`;
+  chgEl.className = 'chart-chg ' + cls;
+  for (const key of ['ma5', 'ma10', 'ma20']) {
+    const v = maFull[key][rows.length - 1];
+    document.getElementById(key + '-' + idx).textContent = v === null || v === undefined ? '—' : fmtNum(v, 2);
+  }
+
+  // 悬停
+  const svgEl = document.getElementById('svg-' + idx);
+  const cross = document.getElementById('cross-' + idx);
+  const tip = document.getElementById('tip-' + idx);
+  svgEl.addEventListener('mousemove', e => {
+    const rect = svgEl.getBoundingClientRect();
+    const sx = (e.clientX - rect.left) * (W / rect.width);
+    let i = Math.floor((sx - padL) / step);
+    if (i < 0) i = 0; if (i > n - 1) i = n - 1;
+    const cx = x(i);
+    cross.setAttribute('x1', cx); cross.setAttribute('x2', cx); cross.setAttribute('opacity', '1');
+    const r = data[i], pc = i > 0 ? data[i - 1].c : r.o;
+    const pct = pc ? (r.c - pc) / pc * 100 : 0;
+    const cup = r.c >= r.o;
+    tip.innerHTML =
+      `<div class="row"><span class="lb">${r.d}</span><span style="color:${cup ? '#fca5a5' : '#86efac'}">${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%</span></div>` +
+      `<div class="row"><span class="lb">开</span>${fmtNum(r.o, 2)}</div>` +
+      `<div class="row"><span class="lb">高</span>${fmtNum(r.h, 2)}</div>` +
+      `<div class="row"><span class="lb">低</span>${fmtNum(r.l, 2)}</div>` +
+      `<div class="row"><span class="lb">收</span>${fmtNum(r.c, 2)}</div>`;
+    tip.style.display = 'block';
+    const wr = wrap.getBoundingClientRect();
+    let tx = e.clientX - wr.left + 16, ty = e.clientY - wr.top - 20;
+    if (tx + 170 > wr.width) tx = e.clientX - wr.left - 180;
+    if (ty < 0) ty = 4;
+    tip.style.left = tx + 'px'; tip.style.top = ty + 'px';
+  });
+  svgEl.addEventListener('mouseleave', () => { cross.setAttribute('opacity', '0'); tip.style.display = 'none'; });
+}
+
+// 初始化 + 区间切换
+document.querySelectorAll('.chart-block').forEach(block => {
+  const idx = block.dataset.idx;
+  const wrap = document.getElementById('wrap-' + idx);
+  const rangeBox = document.getElementById('range-' + idx);
+  RANGES.forEach(r => {
+    const b = document.createElement('button');
+    b.textContent = r.label;
+    b.dataset.days = r.days;
+    if (r.days === DEFAULT_RANGE) b.classList.add('active');
+    b.addEventListener('click', () => {
+      rangeBox.querySelectorAll('button').forEach(x => x.classList.remove('active'));
+      b.classList.add('active');
+      renderChart(idx, parseInt(b.dataset.days, 10));
+    });
+    rangeBox.appendChild(b);
+  });
+  renderChart(idx, DEFAULT_RANGE);
+});
+</script>
+</body>
+</html>
