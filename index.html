@@ -109,7 +109,7 @@
   <div class="note">
     ⚠️ <b>溢价率 = (场内价 − 单位净值) ÷ 单位净值 × 100%</b>。QDII 净值为滞后净值（T+1/T+2），溢价仅供参考。
     正溢价 → 场外申购（按净值）更划算；负溢价 → 场内买入更划算。<br>
-    <b>代销额度</b>=天天基金等第三方渠道；<b>直销额度</b>=基金公司官方渠道（来自公告解析，可能缺失，仅供参考）。
+    <b>代销额度</b>=天天基金等第三方渠道（单日限购金额）。
   </div>
 
   <div class="toolbar">
@@ -153,7 +153,6 @@
           <th data-sort="nav">单位净值</th>
           <th data-sort="premium">溢价率</th>
           <th class="no-sort">代销额度</th>
-          <th class="no-sort">直销额度</th>
           <th class="no-sort">跟踪误差</th>
           <th class="no-sort">费率(年)</th>
         </tr>
@@ -223,18 +222,15 @@ function premiumHtml(v) {
 function otcQuota(f) {
   const s = f.otc_status || '', lim = f.otc_limit || '';
   if (s.includes('暂不销售')) return '<span class="muted">暂不销售</span>';
-  if (s.includes('暂停')) return `<span class="status-pause">暂停申购${lim ? ' ' + lim : ''}</span>`;
-  if (s.includes('限大额') || s.includes('限额')) return `<span class="limit">${lim || '限大额'}</span>`;
+  // 暂停申购：不能买，不显示残留的旧额度（避免误导）
+  if (s.includes('暂停')) return '<span class="status-pause">暂停申购</span>';
+  if (s.includes('限大额') || s.includes('限额')) {
+    if (lim) return `<span class="limit">${lim}</span>`;
+    return '<span class="limit">限大额</span>';
+  }
   if (s.includes('开放')) return '<span class="status-open">开放申购</span>';
   if (s.includes('场内')) return '<span class="muted">场内品种</span>';
   return s ? s : '<span class="muted">—</span>';
-}
-function directQuota(f) {
-  const s = f.direct_status || '', lim = f.direct_limit || '';
-  if (s.includes('暂停')) return '<span class="status-pause">暂停申购</span>';
-  if (s.includes('限大额')) return `<span class="limit">${lim || '限大额'}</span>`;
-  if (lim) return `<span class="limit">${lim}</span>`;
-  return '<span class="muted">—</span>';
 }
 function trackingError(v) {
   if (v === null || v === undefined) return '<span class="muted">—</span>';
@@ -279,7 +275,6 @@ function rowHtml(f) {
       <td>${fmtNav(f.nav)}<div class="muted" style="font-size:11px">${fmt(f.nav_date, '')}</div></td>
       <td>${premiumHtml(f.premium)}</td>
       <td>${otcQuota(f)}</td>
-      <td>${directQuota(f)}</td>
       <td>${trackingError(f.tracking_error)}</td>
       <td>${feeCell(f)}</td>
     </tr>`;
@@ -300,16 +295,16 @@ function render() {
   const showOtc = posFilter !== '场内';     // 全部 / 场外
 
   if (showField) {
-    html += `<tr class="group-row"><td colspan="10">▍场内 · ETF / LOF（二级市场买入，看溢价）</td></tr>`;
+    html += `<tr class="group-row"><td colspan="9">▍场内 · ETF / LOF（二级市场买入，看溢价）</td></tr>`;
     html += onExchange.map(rowHtml).join('');
   }
   if (showOtc) {
-    html += `<tr class="group-row otc"><td colspan="10">▍场外 · 指数基金（按净值申购，看额度）</td></tr>`;
+    html += `<tr class="group-row otc"><td colspan="9">▍场外 · 指数基金（按净值申购，看额度）</td></tr>`;
     html += otc.map(rowHtml).join('');
   }
 
   const tbody = document.querySelector('#tbl tbody');
-  tbody.innerHTML = html || '<tr><td colspan="10" style="text-align:center;padding:30px" class="muted">没有符合条件的基金</td></tr>';
+  tbody.innerHTML = html || '<tr><td colspan="9" style="text-align:center;padding:30px" class="muted">没有符合条件的基金</td></tr>';
 
   document.querySelectorAll('thead th[data-sort]').forEach(th => {
     const k = th.dataset.sort;
@@ -568,7 +563,7 @@ if (window.FUND_DATA) {
 } else {
   fetch('data.json').then(r => r.json()).then(applyData).catch(e => {
     document.querySelector('#tbl tbody').innerHTML =
-      '<tr><td colspan="10" style="text-align:center;padding:30px" class="muted">加载数据失败：请先运行 scrape.py 生成数据，或双击「启动.bat」</td></tr>';
+      '<tr><td colspan="9" style="text-align:center;padding:30px" class="muted">加载数据失败：请先运行 scrape.py 生成数据，或双击「启动.bat」</td></tr>';
   });
 }
 

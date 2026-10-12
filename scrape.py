@@ -9,7 +9,6 @@
   2. 净值/名称/申购费 天天基金 pingzhongdata（Data_netWorthTrend 末条为最新净值）
   3. 申购状态/限购金额/跟踪误差  天天基金基金详情页 HTML
   4. 管理费/托管费/销售服务费   天天基金基金概况页（f10 jbgk）
-  5. 直销额度    最新限额公告 PDF（可选依赖 PyMuPDF，缺失则降级）
 
 输出：data.json（供 index.html 渲染）
 
@@ -22,19 +21,12 @@ import re
 import time
 import datetime
 import os
-import sys
-
-# 可选依赖：解析公告 PDF 提取「直销额度」。未安装则直销额度降级为空。
-try:
-    import pymupdf  # noqa: F401
-    HAS_PDF = True
-except ImportError:
-    HAS_PDF = False
 
 # 基金清单：(代码, 市场, 类型, 指数, 基金公司)
 #   市场：'sh' 沪市 / 'sz' 深市 / None 场外（无场内交易）
 #   类型：'ETF' / 'LOF' / '场外'
 #   指数：'纳指100' / '标普500' / '纳指科技'
+#   场内 ETF/LOF 全保留；场外仅保留 A 类份额（去掉 C/D/E/F/I 类）
 FUNDS = [
     # ================= 纳斯达克100 =================
     # ---- ETF（场内可交易）----
@@ -53,31 +45,24 @@ FUNDS = [
     # ---- LOF（场内+场外）----
     ("160213", "sz", "LOF", "纳指100", "国泰基金"),
     ("161130", "sz", "LOF", "纳指100", "易方达基金"),
-    # ---- 场外指数基金（A/C/D/E/F/I 类，无场内）----
+    # ---- 场外指数基金（仅 A 类）----
     ("270042", None, "场外", "纳指100", "广发基金"),
-    ("021778", None, "场外", "纳指100", "广发基金"),
     ("040046", None, "场外", "纳指100", "华安基金"),
     ("000834", None, "场外", "纳指100", "大成基金"),
     ("539001", None, "场外", "纳指100", "建信基金"),
-    ("023422", None, "场外", "纳指100", "建信基金"),
     ("016452", None, "场外", "纳指100", "南方基金"),
-    ("021000", None, "场外", "纳指100", "南方基金"),
     ("018043", None, "场外", "纳指100", "天弘基金"),
-    ("022525", None, "场外", "纳指100", "天弘基金"),
     ("019172", None, "场外", "纳指100", "摩根基金"),
     ("018966", None, "场外", "纳指100", "汇添富基金"),
-    ("021773", None, "场外", "纳指100", "汇添富基金"),
     ("019524", None, "场外", "纳指100", "华泰柏瑞基金"),
-    ("022664", None, "场外", "纳指100", "华泰柏瑞基金"),
     ("019547", None, "场外", "纳指100", "招商基金"),
     ("019441", None, "场外", "纳指100", "万家基金"),
     ("019736", None, "场外", "纳指100", "宝盈基金"),
     # ================= 纳指科技 =================
     # ---- ETF（追踪纳斯达克科技市值加权指数）----
     ("159509", "sz", "ETF", "纳指科技", "景顺长城基金"),
-    # ---- 场外联接基金（A/C/E 类）----
+    # ---- 场外联接基金（仅 A 类）----
     ("017091", None, "场外", "纳指科技", "景顺长城基金"),
-    ("019118", None, "场外", "纳指科技", "景顺长城基金"),
     # ================= 标普500 =================
     # ---- ETF（场内可交易）----
     ("513500", "sh", "ETF", "标普500", "博时基金"),
@@ -86,7 +71,7 @@ FUNDS = [
     ("159655", "sz", "ETF", "标普500", "华夏基金"),
     # ---- LOF（场内+场外）----
     ("161125", "sz", "LOF", "标普500", "易方达基金"),
-    # ---- 场外指数基金（A/C 类，无场内）----
+    # ---- 场外指数基金（仅 A 类）----
     ("050025", None, "场外", "标普500", "博时基金"),
     ("018064", None, "场外", "标普500", "华夏基金"),
     ("096001", None, "场外", "标普500", "大成基金"),
@@ -255,124 +240,6 @@ def fetch_fees(code):
     }
 
 
-# ---------------------------------------------------------------- 直销额度（公告解析）
-_AMOUNT_RE = r"([0-9][0-9,]*(?:\.[0-9]{1,2})?)"
-_UNIT_RE = r"(人民币元|万元|美元|元)"
-
-
-def _clean_amount(num, unit):
-    """规范化金额显示：'10.00' -> '10'，'人民币元' -> '元'，'10000元' -> '1万元'。"""
-    try:
-        v = float(num.replace(",", ""))
-        if v == int(v):
-            num = str(int(v))
-    except ValueError:
-        pass
-    unit = unit.replace("人民币元", "元")
-    if unit == "元":
-        try:
-            v = int(float(num.replace(",", "")))
-            if v >= 10000 and v % 10000 == 0:
-                return f"{v // 10000}万元"
-        except ValueError:
-            pass
-    return num + unit
-
-
-def _amount_after(t, kw, maxspan=90):
-    """找关键词后第一个金额（如 '500元' / '2万元' / '750美元'）。
-
-    遍历所有出现位置：关键词常出现在公告标题（如「在直销渠道暂停大额申购」），
-    其后续 90 字内并无金额，真正的额度在正文里关键词的后续出现处。
-    """
-    start = 0
-    while True:
-        i = t.find(kw, start)
-        if i < 0:
-            return None
-        seg = t[i:i + maxspan]
-        m = re.search(_AMOUNT_RE + r"\s*" + _UNIT_RE, seg)
-        if m:
-            return _clean_amount(m.group(1), m.group(2))
-        start = i + len(kw)
-
-
-def _find_unified_limit(t):
-    """公告未区分直销/代销时，从正文找「统一限额金额」。按常见措辞优先级尝试。"""
-    patterns = [
-        # 标准化表格：下属分级基金的限制申购金额（单位：人民币元）10.00 ...
-        r"限制申购(?:（[^）]{0,14}）)?金额(?:（单位[^）]{0,20}）)?[^0-9]{0,20}" + _AMOUNT_RE,
-        # 调整为 X元（新限额；旧值在「调整为」之前）
-        r"调整为[^0-9]{0,15}" + _AMOUNT_RE + r"\s*" + _UNIT_RE,
-        # 不应超过 / 不超过 X元
-        r"不应?超过[^0-9]{0,15}" + _AMOUNT_RE + r"\s*" + _UNIT_RE,
-        # 限制金额为 / 限额为 X元
-        r"(?:限制金额|限额)(?:为|调整为)[^0-9]{0,15}" + _AMOUNT_RE + r"\s*" + _UNIT_RE,
-        # 兜底：限额为 / 限额调整为 / 不超过 / 单日..上限
-        r"(?:限额为|限额调整为|不超过|单日.{0,12}上限)[^0-9]{0,15}" + _AMOUNT_RE + r"\s*" + _UNIT_RE,
-    ]
-    for p in patterns:
-        m = re.search(p, t)
-        if m:
-            # 带单位的分组（第二组是单位）；表格类只捕获金额、默认人民币元
-            if m.lastindex and m.lastindex >= 2 and m.group(2):
-                return _clean_amount(m.group(1), m.group(2))
-            return _clean_amount(m.group(1), "元")
-    return None
-
-
-def _parse_direct_limit(text):
-    """从公告正文解析直销/代销额度。返回 (直销, 代销)，尽力而为。"""
-    t = re.sub(r"\s+", "", text)
-    direct = _amount_after(t, "直销") if "直销" in t else None
-    dist = _amount_after(t, "代销") if "代销" in t else None
-    if direct or dist:
-        # 公告区分了直销/代销两种额度
-        return direct, dist
-    # 未区分渠道：统一限额（直销 = 代销）
-    unified = _find_unified_limit(t)
-    return unified, unified
-
-
-def fetch_direct_limit(code):
-    """解析最新限额公告，返回 (直销状态, 直销限额文本)。无公告或无法解析则 (None, None)。"""
-    if not HAS_PDF:
-        return None, None
-    try:
-        url = f"https://api.fund.eastmoney.com/f10/JJGG?fundcode={code}&pageIndex=1&pageSize=20&type=5"
-        data = json.loads(fetch(url, referer="https://fundf10.eastmoney.com/"))
-        items = data.get("Data") or []
-    except Exception:
-        return None, None
-    # 按日期倒序，找最新一条「申购状态相关」公告（限额/大额/限制/暂停申购，排除恢复）
-    items.sort(key=lambda x: x.get("PUBLISHDATEDesc", ""), reverse=True)
-    ann = None
-    for it in items:
-        title = it.get("TITLE", "")
-        if "恢复" in title:
-            continue
-        if any(k in title for k in ("限额", "大额", "限制", "金额限制", "暂停申购")):
-            ann = it
-            break
-    if not ann:
-        return None, None
-    # 纯「暂停申购」（不含「大额」）→ 直销渠道同样暂停，无金额
-    title = ann.get("TITLE", "")
-    if "暂停申购" in title and "大额" not in title:
-        return "暂停申购", None
-    # 其余为「限大额」类，下载 PDF 解析金额
-    try:
-        pdf_url = f"https://pdf.dfcfw.com/pdf/H2_{ann['ID']}_1.pdf"
-        raw = fetch(pdf_url, raw=True)
-        doc = pymupdf.open(stream=raw, filetype="pdf")
-        text = "".join(page.get_text() for page in doc)
-    except Exception:
-        return None, None
-    direct, _dist = _parse_direct_limit(text)
-    status = "限大额" if direct else None
-    return status, direct
-
-
 # ---------------------------------------------------------------- 暂停申购时长
 def fetch_pause_date(code):
     """获取最近一次非节假日「暂停申购」公告日期，返回 'YYYY-MM-DD' 或 None。"""
@@ -505,7 +372,6 @@ def write_kline_data():
 def main():
     start = time.time()
     print(f"[{datetime.datetime.now():%Y-%m-%d %H:%M:%S}] 开始抓取 {len(FUNDS)} 只基金...")
-    print(f"  PDF 解析依赖 PyMuPDF：{'已安装' if HAS_PDF else '未安装（直销额度将缺失）'}")
 
     # 1) 场内价（仅 ETF/LOF）
     trade_codes = [(c, m) for c, m, t, i, comp in FUNDS if m]
@@ -527,8 +393,6 @@ def main():
             "premium": None,
             "otc_status": None,      # 代销状态（天天基金）
             "otc_limit": None,       # 代销限额
-            "direct_status": None,   # 直销状态（公告）
-            "direct_limit": None,    # 直销限额
             "tracking_error": None,  # 年化跟踪误差 %
             "fee_mgmt": None,        # 管理费 %
             "fee_custodian": None,   # 托管费 %
@@ -582,9 +446,7 @@ def main():
                 except ValueError:
                     pass
 
-        # 直销额度（仅场外，尽力解析公告）
-        if not market:
-            item["direct_status"], item["direct_limit"] = fetch_direct_limit(code)
+        # 直销额度已移除
 
         funds.append(item)
         time.sleep(0.3)  # 温和限速，避免触发风控
@@ -596,7 +458,7 @@ def main():
             old = json.load(open(OUT_FILE, encoding="utf-8"))
             old_map = {f["code"]: f for f in old.get("funds", [])}
             fields = ("name", "nav", "nav_date", "price", "premium",
-                      "otc_status", "otc_limit", "direct_status", "direct_limit",
+                      "otc_status", "otc_limit",
                       "tracking_error", "fee_mgmt", "fee_custodian", "fee_sales",
                       "fee_buy", "fee_buy_orig")
             for item in funds:
@@ -608,6 +470,14 @@ def main():
                         item[k] = o.get(k)
         except Exception:
             pass
+
+    # 清理规则：暂停申购 / 暂不销售 的基金，不应残留「限购金额」
+    # （旧数据兜底可能把上一次「限大额」时的金额带过来，导致状态与金额矛盾）
+    for item in funds:
+        for status_key, limit_key in (("otc_status", "otc_limit"),):
+            st = item.get(status_key) or ""
+            if ("暂停" in st) or ("暂不销售" in st):
+                item[limit_key] = None
 
     # 指数实时点位与今日涨跌（纳指100 / 标普500）
     index_quotes = fetch_index_quotes()
@@ -622,7 +492,7 @@ def main():
 
     out = {
         "updated": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "note": "溢价率 = (场内价 - 单位净值) / 单位净值 × 100%；QDII 净值为滞后净值（T+1/T+2），溢价仅供参考。代销额度=天天基金渠道，直销额度=基金公司官方渠道（公告解析，可能缺失）。",
+        "note": "溢价率 = (场内价 - 单位净值) / 单位净值 × 100%；QDII 净值为滞后净值（T+1/T+2），溢价仅供参考。代销额度=天天基金渠道。",
         "funds": funds,
         "index_quotes": index_quotes,
     }
@@ -639,8 +509,7 @@ def main():
 
     # 简要汇总
     ok = sum(1 for x in funds if x["nav"])
-    n_direct = sum(1 for x in funds if x["direct_limit"])
-    print(f"  完成：{ok}/{len(funds)} 只基金有净值数据，直销额度解析成功 {n_direct} 只，用时 {time.time()-start:.1f}s")
+    print(f"  完成：{ok}/{len(funds)} 只基金有净值数据，用时 {time.time()-start:.1f}s")
     print(f"  已写入 {OUT_FILE}")
 
 
