@@ -121,8 +121,8 @@
   <div class="toolbar">
     <span class="grp">
       <span class="lbl">指数</span>
-      <button data-filter="idx" data-val="all" class="active">全部</button>
-      <button data-filter="idx" data-val="纳指100">纳斯达克100</button>
+      <button data-filter="idx" data-val="all">全部</button>
+      <button data-filter="idx" data-val="纳指100" class="active">纳斯达克100</button>
       <button data-filter="idx" data-val="标普500">标普500</button>
       <button data-filter="idx" data-val="纳指科技">纳指科技</button>
     </span>
@@ -151,7 +151,7 @@
           <th class="left no-sort">指数</th>
           <th data-sort="nav">单位净值</th>
           <th data-sort="ret_1y">近1年</th>
-          <th class="no-sort">申购状态</th>
+          <th data-sort="otc">申购状态</th>
           <th data-sort="otc_limit">代销额度</th>
           <th class="no-sort">跟踪误差</th>
           <th class="no-sort">费率(年)</th>
@@ -200,9 +200,10 @@
 <script src="kline_data.js"></script>
 <script>
 let DATA = [];
-let idxFilter = 'all';        // all / 纳指100 / 标普500 / 纳指科技
-let innerSortKey = 'otc_limit'; // 默认按申购额度排序
+let idxFilter = '纳指100';      // all / 纳指100 / 标普500 / 纳指科技；默认只看纳斯达克100
+let innerSortKey = 'ret_1y';    // 默认按近1年收益率排序
 let innerSortAsc = false;       // 默认从高到低
+let otcFirst = false;           // 可申购优先：点「申购状态」列头开关；开启后可申购在前，组内仍按当前排序列
 
 const fmt = (v, d = '-') => (v === null || v === undefined || v === '') ? d : v;
 const fmtNav = (v) => (v === null || v === undefined) ? '—' : v.toFixed(4);
@@ -253,7 +254,7 @@ function matchFilter(f) {
 }
 
 const idxOrder = { '纳指100': 0, '标普500': 1, '纳指科技': 2 };
-function byIdx(a, b) { return (idxOrder[a.index] ?? 9) - (idxOrder[b.index] ?? 9); }
+const idxTitle = { '纳指100': '纳斯达克100', '标普500': '标普500', '纳指科技': '纳指科技' };
 
 // 解析限购金额为数值（"10元"→10，"100元"→100，"1万元"→10000），无法解析返回 -1
 function limitToNum(s) {
@@ -281,6 +282,14 @@ function innerCompare(a, b) {
   return innerSortAsc ? va - vb : vb - va;
 }
 
+// 申购状态分组，与状态列展示口径一致：含「暂停」= 不可申购，其余（开放/限大额）= 可申购
+const isBuyable = f => !(f.otc_status || '').includes('暂停');
+function otcCompare(a, b) {
+  const ba = isBuyable(a), bb = isBuyable(b);
+  if (ba !== bb) return ba ? -1 : 1;
+  return innerCompare(a, b);
+}
+
 function rowHtml(f) {
   const status = f.otc_status || '';
   const statusCell = status.includes('暂停') ? '<span class="status-pause">暂停申购</span>'
@@ -300,19 +309,18 @@ function rowHtml(f) {
 }
 
 function render() {
-  const filtered = DATA.filter(matchFilter);
+  const filtered = DATA.filter(matchFilter).sort(otcFirst ? otcCompare : innerCompare);
 
-  // 排序：暂停申购的始终排最后；其余按 innerSortKey 排序（默认额度从高到低）
-  filtered.sort((a, b) => {
-    const pa = (a.otc_status || '').includes('暂停');
-    const pb = (b.otc_status || '').includes('暂停');
-    if (pa !== pb) return pa ? 1 : -1;      // 暂停申购的排最后
-    return innerCompare(a, b);
-  });
+  // 「全部」时按指数分组，各组内独立排序（纳指100 在前，标普500 在后）
+  const groups = (idxFilter === 'all'
+    ? Object.keys(idxOrder).sort((a, b) => idxOrder[a] - idxOrder[b])
+    : [idxFilter]).filter(g => filtered.some(f => f.index === g));
 
   let html = '';
-  html += `<tr class="group-row otc"><td colspan="9">▍场外 · 指数基金（按净值申购，看额度）</td></tr>`;
-  html += filtered.map(rowHtml).join('');
+  groups.forEach(g => {
+    html += `<tr class="group-row otc"><td colspan="9">▍${idxTitle[g]} · 场外 A 类</td></tr>`;
+    html += filtered.filter(f => f.index === g).map(rowHtml).join('');
+  });
 
   const tbody = document.querySelector('#tbl tbody');
   tbody.innerHTML = html || '<tr><td colspan="9" style="text-align:center;padding:30px" class="muted">没有符合条件的基金</td></tr>';
@@ -320,7 +328,8 @@ function render() {
   document.querySelectorAll('thead th[data-sort]').forEach(th => {
     const k = th.dataset.sort;
     th.querySelector('.sort-ind')?.remove();
-    if (k === innerSortKey) th.insertAdjacentHTML('beforeend', `<span class="sort-ind">${innerSortAsc ? ' ▲' : ' ▼'}</span>`);
+    if (k === 'otc' && otcFirst) th.insertAdjacentHTML('beforeend', '<span class="sort-ind"> ▼</span>');
+    else if (k === innerSortKey) th.insertAdjacentHTML('beforeend', `<span class="sort-ind">${innerSortAsc ? ' ▲' : ' ▼'}</span>`);
   });
 
   updateQuoteVisibility();
@@ -338,12 +347,15 @@ document.querySelectorAll('.toolbar button[data-filter]').forEach(btn => {
   });
 });
 
-// 表头排序（组内）
+// 表头排序（组内）；「申购状态」列为开关：点一下可申购优先，再点恢复混排
 document.querySelectorAll('thead th[data-sort]').forEach(th => {
   th.addEventListener('click', () => {
     const k = th.dataset.sort;
-    if (innerSortKey === k) innerSortAsc = !innerSortAsc;
-    else { innerSortKey = k; innerSortAsc = false; }
+    if (k === 'otc') {
+      otcFirst = !otcFirst;
+    } else {
+      innerSortKey = k; innerSortAsc = false; otcFirst = false;
+    }
     render();
   });
 });

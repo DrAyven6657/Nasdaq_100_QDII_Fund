@@ -25,7 +25,7 @@ import os
 #   市场：'sh' 沪市 / 'sz' 深市 / None 场外（无场内交易）
 #   类型：'ETF' / 'LOF' / '场外'
 #   指数：'纳指100' / '标普500' / '纳指科技'
-#   仅保留场外 A 类份额（已去掉场内 ETF/LOF 及 C/D/E/F/I 类份额）
+#   仅保留 A 类份额（C/D/E/F/I 类份额已去掉）
 FUNDS = [
     # ================= 纳斯达克100（场外 A 类） =================
     ("270042", None, "场外", "纳指100", "广发基金"),
@@ -40,6 +40,11 @@ FUNDS = [
     ("019547", None, "场外", "纳指100", "招商基金"),
     ("019441", None, "场外", "纳指100", "万家基金"),
     ("019736", None, "场外", "纳指100", "宝盈基金"),
+    ("160213", "sz", "LOF", "纳指100", "国泰基金"),
+    ("161130", "sz", "LOF", "纳指100", "易方达基金"),
+    ("015299", None, "场外", "纳指100", "华夏基金"),
+    ("016532", None, "场外", "纳指100", "嘉实基金"),
+    ("016055", None, "场外", "纳指100", "博时基金"),
     # ================= 纳指科技（场外 A 类） =================
     ("017091", None, "场外", "纳指科技", "景顺长城基金"),
     # ================= 标普500（场外 A 类） =================
@@ -70,6 +75,24 @@ def fetch(url, referer="https://fund.eastmoney.com/", retry=3, raw=False):
 
 
 # ---------------------------------------------------------------- 净值/名称/申购费
+def _ret_1y_from_series(points):
+    """points: [(时间戳ms, 数值), ...] 按时间升序。返回「最新 vs 约365天前」的涨跌幅 %。"""
+    if not points:
+        return None
+    last_ts, last_v = points[-1]
+    if not last_v:
+        return None
+    target = last_ts - 365 * 24 * 3600 * 1000
+    prev = None
+    for ts, v in points:  # 顺序遍历，找第一个 >= target 的值
+        if ts >= target:
+            prev = v
+            break
+    if not prev:
+        return None
+    return round((last_v - prev) / prev * 100, 2)
+
+
 def fetch_nav(code):
     """从 pingzhongdata 拿最新单位净值 + 净值日期 + 名称 + 申购费率。返回 dict 或 None。"""
     url = f"https://fund.eastmoney.com/pingzhongdata/{code}.js"
@@ -100,6 +123,7 @@ def fetch_nav(code):
         except ValueError:
             pass
     # Data_netWorthTrend = [{"x":...,"y":净值,...}, ...]
+    nav_points = []
     m = re.search(r"Data_netWorthTrend = (\[.*?\]);", js)
     if m:
         try:
@@ -110,22 +134,35 @@ def fetch_nav(code):
                 ts = last.get("x")
                 if ts:
                     nav_date = datetime.datetime.fromtimestamp(ts / 1000).strftime("%Y-%m-%d")
-                # 近一年收益率：往前找约 365 天前最近的一个净值
-                try:
-                    target = last.get("x") - 365 * 24 * 3600 * 1000
-                    prev = None
-                    for it in arr:  # 顺序遍历，找第一个 >= target 的净值
-                        if it.get("x") >= target:
-                            prev = it.get("y")
-                            break
-                    if prev and nav:
-                        ret_1y = round((nav - prev) / prev * 100, 2)
-                except Exception:
-                    ret_1y = None
+                nav_points = [(it["x"], it["y"]) for it in arr if it.get("x") and it.get("y")]
         except Exception:
             nav = None
     if nav is None:
         return None
+
+    # 近一年收益率优先取天天基金官方字段 syl_1n（已复权，含分红再投）。
+    # 不能用单位净值算：分红/份额折算会除权，把收益算成大幅亏损
+    # （如 160213 于 2025-08-20 每份分红 2.8 元、2025-11-25 每份分红 0.9 元）。
+    m = re.search(r'var syl_1n\s*=\s*"([^"]*)"', js)
+    if m and m.group(1).strip() not in ("", "-", "--"):
+        try:
+            ret_1y = round(float(m.group(1)), 2)
+        except ValueError:
+            ret_1y = None
+    # 退路1：累计净值走势（同样已含分红）
+    if ret_1y is None:
+        m = re.search(r"Data_ACWorthTrend = (\[.*?\]);", js)
+        if m:
+            try:
+                arr = json.loads(m.group(1))
+                ret_1y = _ret_1y_from_series(
+                    [(p[0], p[1]) for p in arr if isinstance(p, list) and len(p) >= 2]
+                )
+            except Exception:
+                ret_1y = None
+    # 退路2：单位净值走势
+    if ret_1y is None:
+        ret_1y = _ret_1y_from_series(nav_points)
     return {
         "code": code, "name": name, "nav": float(nav), "nav_date": nav_date,
         "fee_buy": fee_buy, "fee_buy_orig": fee_buy_orig, "ret_1y": ret_1y,
@@ -197,26 +234,6 @@ def fetch_fees(code):
     }
 
 
-# ---------------------------------------------------------------- 暂停申购时长
-def fetch_pause_date(code):
-    """获取最近一次非节假日「暂停申购」公告日期，返回 'YYYY-MM-DD' 或 None。"""
-    try:
-        url = f"https://api.fund.eastmoney.com/f10/JJGG?fundcode={code}&pageIndex=1&pageSize=50&type=5"
-        data = json.loads(fetch(url, referer="https://fundf10.eastmoney.com/"))
-        items = data.get("Data") or []
-    except Exception:
-        return None
-    items.sort(key=lambda x: x.get("PUBLISHDATEDesc", ""), reverse=True)
-    for it in items:
-        t = it.get("TITLE", "")
-        if "节假日" in t:
-            continue
-        # 完全暂停申购（排除「暂停大额」=限大额、「恢复」）
-        if "暂停申购" in t and "大额" not in t and "恢复" not in t:
-            return it.get("PUBLISHDATEDesc")
-    return None
-
-
 # ---------------------------------------------------------------- 指数实时点位
 # 数据源：腾讯行情 qt.gtimg.cn（us.NDX=纳斯达克100，us.INX=标普500，与场内 ETF 同一接口）。
 INDEX_QUOTES = {
@@ -268,60 +285,56 @@ def fetch_index_quotes():
 
 
 # ---------------------------------------------------------------- 指数日K（kline_data.js）
-# 数据源：雅虎财经 chart API（^NDX=纳指100，^GSPC=标普500）。可回溯到指数发布之初
-# （纳指100 1985 年、标普500 1970 年）。腾讯 us.NDX 只到 2000 年，故弃用。
+# 数据源：东方财富 push2his（100.NDX100=纳指100，100.SPX=标普500）。国内直连，
+# 一次请求返回全部历史日K（纳指100 自 2019 年、标普500 自 1986 年）。
+# 注意：东财的 100.NDX 是纳斯达克综合指数（COMP），点位和逐日涨跌都与纳指100 不同，不能用。
 KLINE_OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "kline_data.js")
-KLINE_YAHOO = {
-    "纳指100": "%5ENDX",   # ^NDX
-    "标普500": "%5EGSPC",  # ^GSPC
+KLINE_EASTMONEY = {
+    "纳指100": "100.NDX100",
+    "标普500": "100.SPX",
 }
 
 
-def fetch_all_kline(yahoo_code):
-    """从雅虎 chart API 抓取全部日K（自发布以来），返回按日期升序的 rows 列表。"""
+def fetch_all_kline(secid):
+    """从东财 K 线接口抓取全部日K，返回按日期升序的 rows 列表。"""
     url = (
-        "https://query1.finance.yahoo.com/v8/finance/chart/"
-        f"{yahoo_code}?period1=0&period2=9999999999&interval=1d"
+        "https://push2his.eastmoney.com/api/qt/stock/kline/get"
+        f"?secid={secid}&fields1=f1,f2,f3,f4,f5,f6"
+        "&fields2=f51,f52,f53,f54,f55,f56&klt=101&fqt=1&beg=0&end=20500101"
     )
     try:
-        data = json.loads(fetch(url))
+        data = json.loads(fetch(url, referer="https://quote.eastmoney.com/"))
     except Exception as e:  # noqa
-        print(f"  [警告] {yahoo_code} K线抓取失败: {e}")
+        print(f"  [警告] {secid} K线抓取失败: {e}")
         return []
-    result = (data.get("chart") or {}).get("result") or []
-    if not result:
-        return []
-    r = result[0]
-    ts = r.get("timestamp") or []
-    q = ((r.get("indicators") or {}).get("quote") or [{}])[0]
-    o = q.get("open") or []
-    c = q.get("close") or []
-    h = q.get("high") or []
-    l = q.get("low") or []
-    v = q.get("volume") or []
     rows = []
-    for i, t in enumerate(ts):
-        if c[i] is None:  # 跳过停牌/无成交日
+    for line in (data.get("data") or {}).get("klines") or []:
+        f = line.split(",")
+        if len(f) < 6:
             continue
-        d = datetime.datetime.fromtimestamp(t, datetime.timezone.utc).strftime("%Y-%m-%d")
-        rows.append({
-            "d": d,
-            "o": round(float(o[i]), 2) if o[i] is not None else None,
-            "c": round(float(c[i]), 2),
-            "h": round(float(h[i]), 2) if h[i] is not None else None,
-            "l": round(float(l[i]), 2) if l[i] is not None else None,
-            "v": float(v[i]) if v[i] is not None else 0.0,
-        })
+        try:
+            rows.append({
+                "d": f[0],
+                "o": round(float(f[1]), 2),
+                "c": round(float(f[2]), 2),
+                "h": round(float(f[3]), 2),
+                "l": round(float(f[4]), 2),
+                "v": float(f[5]),
+            })
+        except ValueError:
+            continue
     return rows
 
 
 def write_kline_data():
     """抓取纳指100/标普500 全部日K，写入 kline_data.js（供 index.html / kline.html 加载）。"""
+    print("  指数日K抓取中（东方财富，一次请求拿全量历史）...")
     out = {}
-    for name, yahoo_code in KLINE_YAHOO.items():
-        out[name] = fetch_all_kline(yahoo_code)
-        time.sleep(0.5)
+    for name, secid in KLINE_EASTMONEY.items():
+        out[name] = fetch_all_kline(secid)
+        time.sleep(0.3)
     if not any(out.values()):
+        print("  [警告] 指数日K全部抓取失败，保留旧的 kline_data.js")
         return  # 抓取失败，保留旧文件
     payload = json.dumps(out, ensure_ascii=False, separators=(",", ":"))
     with open(KLINE_OUT, "w", encoding="utf-8") as f:
@@ -381,18 +394,6 @@ def main():
         item["fee_mgmt"] = fees["fee_mgmt"]
         item["fee_custodian"] = fees["fee_custodian"]
         item["fee_sales"] = fees["fee_sales"]
-
-        # 场外基金：暂停申购超过3个月（90天）则无参考价值，跳过
-        if item["otc_status"] and "暂停" in item["otc_status"]:
-            pause_date = fetch_pause_date(code)
-            if pause_date:
-                try:
-                    d = datetime.datetime.strptime(pause_date, "%Y-%m-%d")
-                    if (datetime.datetime.now() - d).days > 90:
-                        print(f"  [过滤] {code} {item['name']} 暂停申购已超3个月（{pause_date}），跳过")
-                        continue
-                except ValueError:
-                    pass
 
         # 直销额度已移除
 
