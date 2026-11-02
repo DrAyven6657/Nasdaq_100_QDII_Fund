@@ -40,7 +40,7 @@
 <div class="container">
   <header>
     <h1>纳指100 / 标普500 日K线</h1>
-    <div class="sub">数据源：东方财富（US 指数日K） · 红涨绿跌 · 悬停看开高低收 · 滚轮 / 底部滑杆拖拽缩放</div>
+    <div class="sub">数据源：东方财富（US 指数日K） · 红涨绿跌 · 悬停看开高低收 · 滚轮 / 底部滑杆拖拽缩放<span id="splice-note"></span></div>
   </header>
 
   <div class="chart-block" data-idx="纳指100">
@@ -80,6 +80,14 @@
 <script src="kline_data.js"></script>
 <script>
 // 渲染引擎为共用模块 kline_echarts.js（Apache ECharts 本地化部署）
+// 纳指100 拼接口径说明（接缝信息由 kline_data.js 的 KLINE_SPLICE_META 提供）
+(function () {
+  const m = window.KLINE_SPLICE_META;
+  const el = document.getElementById('splice-note');
+  if (el && m && m.prefix) {
+    el.textContent = ' · 纳斯达克100：' + m.prefix.end + ' 前为 QQQ 复权价折算拼接，仅作趋势参考';
+  }
+})();
 ['纳指100', '标普500'].forEach(function (idx) {
   window.KLINE_ECHARTS.init({
     idx: idx,

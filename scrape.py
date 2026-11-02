@@ -9,7 +9,7 @@
   2. 申购状态/限购金额/跟踪误差  天天基金基金详情页 HTML
   3. 管理费/托管费/销售服务费   天天基金基金概况页（f10 jbgk）
 
-输出：data.json（供 index.html 渲染）
+输出：data.json / data.js（供 index.html 渲染）、kline_data.js（指数日K，含纳指100 历史拼接）
 
 用法：python scrape.py
 """
@@ -285,61 +285,17 @@ def fetch_index_quotes():
 
 
 # ---------------------------------------------------------------- 指数日K（kline_data.js）
-# 数据源：东方财富 push2his（100.NDX100=纳指100，100.SPX=标普500）。国内直连，
-# 一次请求返回全部历史日K（纳指100 自 2019 年、标普500 自 1986 年）。
-# 注意：东财的 100.NDX 是纳斯达克综合指数（COMP），点位和逐日涨跌都与纳指100 不同，不能用。
-KLINE_OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "kline_data.js")
-KLINE_EASTMONEY = {
-    "纳指100": "100.NDX100",
-    "标普500": "100.SPX",
-}
-
-
-def fetch_all_kline(secid):
-    """从东财 K 线接口抓取全部日K，返回按日期升序的 rows 列表。"""
-    url = (
-        "https://push2his.eastmoney.com/api/qt/stock/kline/get"
-        f"?secid={secid}&fields1=f1,f2,f3,f4,f5,f6"
-        "&fields2=f51,f52,f53,f54,f55,f56&klt=101&fqt=1&beg=0&end=20500101"
-    )
-    try:
-        data = json.loads(fetch(url, referer="https://quote.eastmoney.com/"))
-    except Exception as e:  # noqa
-        print(f"  [警告] {secid} K线抓取失败: {e}")
-        return []
-    rows = []
-    for line in (data.get("data") or {}).get("klines") or []:
-        f = line.split(",")
-        if len(f) < 6:
-            continue
-        try:
-            rows.append({
-                "d": f[0],
-                "o": round(float(f[1]), 2),
-                "c": round(float(f[2]), 2),
-                "h": round(float(f[3]), 2),
-                "l": round(float(f[4]), 2),
-                "v": float(f[5]),
-            })
-        except ValueError:
-            continue
-    return rows
+# 抓取逻辑（含纳指100 的 QQQ 历史拼接，见 kline_data.py 模块文档）统一放在 kline_data.py，
+# 这里只负责调用，避免两处数据生成入口口径不一致。
 
 
 def write_kline_data():
-    """抓取纳指100/标普500 全部日K，写入 kline_data.js（供 index.html / kline.html 加载）。"""
-    print("  指数日K抓取中（东方财富，一次请求拿全量历史）...")
-    out = {}
-    for name, secid in KLINE_EASTMONEY.items():
-        out[name] = fetch_all_kline(secid)
-        time.sleep(0.3)
-    if not any(out.values()):
-        print("  [警告] 指数日K全部抓取失败，保留旧的 kline_data.js")
-        return  # 抓取失败，保留旧文件
-    payload = json.dumps(out, ensure_ascii=False, separators=(",", ":"))
-    with open(KLINE_OUT, "w", encoding="utf-8") as f:
-        f.write("window.KLINE_DATA = " + payload + ";\n")
-    print(f"  指数日K: {', '.join(f'{k} {len(v)} 根' for k, v in out.items())}")
+    """更新指数日K数据文件 kline_data.js（含纳指100 历史拼接）。"""
+    try:
+        import kline_data
+        kline_data.main()
+    except Exception as e:  # noqa
+        print(f"  [警告] 指数日K更新失败（保留旧的 kline_data.js）: {e}")
 
 
 # ---------------------------------------------------------------- 主流程
