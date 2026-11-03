@@ -396,7 +396,8 @@ def main():
     print(f"  指数点位: {', '.join(k + ' ' + str(v.get('price')) for k, v in index_quotes.items())}")
 
     out = {
-        "updated": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        # 显示统一用北京时间：Actions 的机器时区是 UTC，不 +8 会显示成"昨天"，易被误判为没更新
+        "updated": (datetime.datetime.utcnow() + datetime.timedelta(hours=8)).strftime("%Y-%m-%d %H:%M:%S"),
         "note": "QDII 净值为滞后净值（T+1/T+2）。代销额度=天天基金渠道（单日限购金额）。",
         "funds": funds,
         "index_quotes": index_quotes,
