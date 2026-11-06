@@ -59,8 +59,20 @@
     return out;
   }
 
+  // 数据行读取：兼容数组 [日期,开,收,高,低,量]（新版，体积更小）与对象格式（旧版），按指数缓存
+  const rowCache = {};
+  function getRows(idx) {
+    if (!(idx in rowCache)) {
+      const raw = (window.KLINE_DATA || {})[idx] || [];
+      rowCache[idx] = (raw.length && Array.isArray(raw[0]))
+        ? raw.map(r => ({ d: r[0], o: r[1], c: r[2], h: r[3], l: r[4], v: r[5] }))
+        : raw;
+    }
+    return rowCache[idx];
+  }
+
   function buildData(idx, days) {
-    const rows = (window.KLINE_DATA || {})[idx] || [];
+    const rows = getRows(idx);
     if (!rows.length) return null;
     const maFull = { ma5: calcMA(rows, 5), ma10: calcMA(rows, 10), ma20: calcMA(rows, 20) };
     let data = days > 0 ? rows.slice(-days) : rows.slice();

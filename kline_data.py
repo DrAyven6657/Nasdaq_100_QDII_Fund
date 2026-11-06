@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""抓取纳指100/标普500 全部日K数据，输出 kline_data.js（供 index.html / kline.html 加载）。
+"""抓取纳指100/标普500/上证指数 全部日K数据，输出 kline_data.js（供 index.html / kline.html 加载）。
 
 用法：python kline_data.py   （scrape.py 每日运行时也会自动调用本模块）
-数据源：东方财富 push2his（100.NDX100 / 100.SPX / 105.QQQ），国内直连，一次请求返回全部历史日K。
+数据源：东方财富 push2his（100.NDX100 / 100.SPX / 1.000001 / 105.QQQ），国内直连，
+一次请求返回全部历史日K。
 注意：东财的 100.NDX 是纳斯达克综合指数（COMP），不是纳指100，点位和涨跌都不同。
+输出格式：KLINE_DATA 每行为紧凑数组 [日期, 开盘, 收盘, 最高, 最低, 成交量]
+（相比对象格式省 ~40% 体积），前端 kline_echarts.js 做归一化，两种格式都能读。
 
 纳指100 历史拼接说明：
   东财的纳斯达克100 指数（100.NDX100）只收录 2019-04-08 之后的行情，更早的真实指数
@@ -24,8 +27,8 @@ import time
 import os
 
 UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36"
-# 东财 secid：100.NDX100=纳斯达克100，100.SPX=标普500，105.QQQ=Invesco 纳指100 ETF（拼接用）
-SYMBOLS = {"纳指100": "100.NDX100", "标普500": "100.SPX"}
+# 东财 secid：100.NDX100=纳斯达克100，100.SPX=标普500，1.000001=上证指数，105.QQQ=Invesco 纳指100 ETF（拼接用）
+SYMBOLS = {"纳指100": "100.NDX100", "标普500": "100.SPX", "上证指数": "1.000001"}
 QQQ_SECID = "105.QQQ"
 OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "kline_data.js")
 
@@ -84,9 +87,23 @@ def load_old():
         m = re.search(r"window\.KLINE_SPLICE_META\s*=\s*(\{.*\})\s*;", src)
         if m:
             meta = json.loads(m.group(1))
+        if old:
+            old = {k: _norm_rows(v) for k, v in old.items()}
         return old, meta
     except Exception:
         return None, None
+
+
+def _norm_rows(rows):
+    """行数据统一为 dict：旧版为 {d,o,c,h,l,v} 对象，新版为紧凑数组 [d,o,c,h,l,v]。"""
+    if not rows or isinstance(rows[0], dict):
+        return rows
+    return [{"d": r[0], "o": r[1], "c": r[2], "h": r[3], "l": r[4], "v": r[5]} for r in rows]
+
+
+def _pack(rows):
+    """dict 行压缩为紧凑数组 [日期,开,收,高,低,量] 再序列化（省去每行重复的键名）。"""
+    return [[r["d"], r["o"], r["c"], r["h"], r["l"], r["v"]] for r in rows]
 
 
 def scale_qqq_prefix(prefix, ndx_open):
@@ -165,6 +182,14 @@ def build():
     else:
         out["纳指100"] = []
 
+    # ---- 上证指数：东财全量真实指数（1990-12 起）；抓取失败沿用旧数据 ----
+    sse = fetch_kline(SYMBOLS["上证指数"])
+    if not sse and old and old.get("上证指数"):
+        sse = old["上证指数"]
+        print("  [兜底] 上证指数 抓取失败，沿用旧的指数日K")
+    out["上证指数"] = sse
+    time.sleep(0.3)
+
     return out, meta
 
 
@@ -173,7 +198,7 @@ def main():
     if not any(out.values()):
         print("  [警告] 指数日K全部抓取失败且无旧数据，保留旧的 kline_data.js")
         return
-    payload = json.dumps(out, ensure_ascii=False, separators=(",", ":"))
+    payload = json.dumps({k: _pack(v) for k, v in out.items()}, ensure_ascii=False, separators=(",", ":"))
     meta_payload = json.dumps(meta, ensure_ascii=False, separators=(",", ":")) if meta else "null"
     with open(OUT, "w", encoding="utf-8") as f:
         f.write("window.KLINE_DATA = " + payload + ";\n")

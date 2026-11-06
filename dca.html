@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>定投模拟 · 纳指100 / 标普500 / 上证指数</title>
+<style>
+  :root {
+    --bg: #f5f6f8; --card: #ffffff; --border: #e5e7eb; --text: #1f2937;
+    --muted: #6b7280; --up: #dc2626; --down: #16a34a; --accent: #1d4ed8;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif;
+    background: var(--bg); color: var(--text); line-height: 1.5; padding: 24px 16px 60px;
+  }
+  .container { max-width: 1200px; margin: 0 auto; }
+  header { margin-bottom: 16px; }
+  header h1 { font-size: 22px; font-weight: 700; }
+  header .sub { color: var(--muted); font-size: 13px; margin-top: 4px; }
+  header .sub a { color: var(--accent); text-decoration: none; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+    padding: 16px 18px; margin-bottom: 14px; box-shadow: 0 1px 3px rgba(0,0,0,.04); }
+  .ctl { display: flex; flex-wrap: wrap; gap: 10px 26px; align-items: flex-end; }
+  .ctl .fld { display: flex; flex-direction: column; gap: 4px; }
+  .ctl .fld > span { font-size: 12px; color: var(--muted); font-weight: 600; }
+  select, input {
+    border: 1px solid var(--border); background: #fff; color: var(--text);
+    padding: 6px 9px; border-radius: 8px; font-size: 13px; outline: none; font-family: inherit;
+  }
+  select:focus, input:focus { border-color: var(--accent); }
+  input[type=number] { width: 110px; }
+  #run {
+    border: 1px solid var(--accent); background: var(--accent); color: #fff;
+    padding: 6px 14px; border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 600; transition: all .15s;
+  }
+  #run:hover { filter: brightness(1.1); }
+  #idx-hint { color: var(--muted); font-size: 12px; margin-top: 8px; }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+  .stat { background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+    padding: 12px 14px; box-shadow: 0 1px 3px rgba(0,0,0,.04); }
+  .stat .lbl { font-size: 12px; color: var(--muted); }
+  .stat .val { font-size: 20px; font-weight: 700; margin-top: 3px; font-variant-numeric: tabular-nums; }
+  .val.up { color: var(--up); } .val.down { color: var(--down); }
+  #chart { height: 430px; }
+  .note { color: var(--muted); font-size: 12px; margin-top: 10px; }
+  .msg { padding: 14px 16px; border-radius: 8px; font-size: 13px; margin-bottom: 14px; display: none; }
+  .msg.err { background: #fef2f2; border: 1px solid #fecaca; color: #b91c1c; }
+  .msg.wait { background: #eff6ff; border: 1px solid #bfdbfe; color: #1d4ed8; }
+  @media (max-width: 720px) {
+    header h1 { font-size: 18px; }
+    .ctl { gap: 10px 16px; }
+    #chart { height: 320px; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <h1>定投模拟</h1>
+    <div class="sub">指数定投回测（按收盘价，未含股息）· <a href="index.html">返回监控主页</a> · <a href="kline.html">指数日K线</a></div>
+  </header>
+
+  <div class="msg" id="msg"></div>
+
+  <div class="card">
+    <div class="ctl">
+      <span class="fld"><span>指数</span>
+        <select id="idx">
+          <option value="纳指100">纳斯达克100</option>
+          <option value="标普500">标普500</option>
+          <option value="上证指数">上证指数</option>
+        </select>
+      </span>
+      <span class="fld"><span>每次投入（元）</span><input id="amount" type="number" min="1" step="100" value="1000"></span>
+      <span class="fld"><span>频率</span>
+        <select id="freq">
+          <option value="month" selected>每月</option>
+          <option value="biweek">每两周</option>
+          <option value="week">每周</option>
+          <option value="day">每日（每个交易日）</option>
+        </select>
+      </span>
+      <span class="fld" id="day-fld"><span>每月扣款日（遇休市顺延）</span>
+        <select id="day">
+          <option value="1">1 日</option>
+          <option value="8" selected>8 日</option>
+          <option value="15">15 日</option>
+          <option value="22">22 日</option>
+        </select>
+      </span>
+      <span class="fld"><span>起始年份</span><select id="y-from"></select></span>
+      <span class="fld"><span>结束年份</span><select id="y-to"></select></span>
+      <span class="fld"><span>&nbsp;</span><button id="run">开始模拟</button></span>
+    </div>
+    <div id="idx-hint"></div>
+  </div>
+
+  <div class="stats" id="stats" style="display:none"></div>
+
+  <div class="card" id="chart-card" style="display:none">
+    <div id="chart"></div>
+    <div class="note">「假如起点一次全买」是对照线：把你整个区间计划投入的钱（每次金额 × 期数）在第一天全部买入、之后不动。两条线对比 = 同样的钱「分批进场 vs 一把梭」谁更划算。口径：按指数收盘价模拟，不含成分股股息（跟踪该指数的基金大约还会多出股息再投收益、扣减费用）；纳指100 在 2019-04-05 前为 QQQ 复权价折算拼接，仅作趋势参考；历史模拟不代表未来收益。</div>
+  </div>
+</div>
+
+<script>
+/* echarts 组件库本地缓存（与 index.html 一致）：升级库时同步改 KEY 版本号 */
+(function () {
+  var KEY = 'echarts.cache.5.5.1';
+  try {
+    var code = localStorage.getItem(KEY);
+    if (code && code.indexOf('</' + 'script') === -1) {
+      document.write('<scr' + 'ipt>' + code + '<\/scr' + 'ipt>');
+      return;
+    }
+  } catch (e) { /* 隐私模式等不支持 localStorage，走正常加载 */ }
+  document.write('<scr' + 'ipt src="echarts.min.js"><\/scr' + 'ipt>');
+  window.addEventListener('load', function () {
+    if (!window.echarts || !window.fetch) return;
+    fetch('echarts.min.js').then(function (r) { return r.text(); }).then(function (t) {
+      if (t && t.indexOf('</' + 'script') === -1) {
+        try { localStorage.setItem(KEY, t); } catch (e) { /* 超出配额则放弃缓存 */ }
+      }
+    }).catch(function () {});
+  });
+})();
+</script>
+<script src="kline_data.js"></script>
+<script>
+'use strict';
+
+/* ---------------- 工具 ---------------- */
+const $ = s => document.querySelector(s);
+function fmtMoney(v, d) {
+  if (v === null || v === undefined || !isFinite(v)) return '—';
+  if (Math.abs(v) >= 1e8) return (v / 1e8).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' 亿';
+  return v.toLocaleString('en-US', { minimumFractionDigits: d === undefined ? 0 : d, maximumFractionDigits: d === undefined ? 0 : d });
+}
+function showMsg(text, kind) {
+  const el = $('#msg');
+  if (!text) { el.style.display = 'none'; return; }
+  el.textContent = text;
+  el.className = 'msg ' + (kind || 'err');
+  el.style.display = 'block';
+}
+
+/* ---------------- 指数选择与数据（本地 kline_data.js，打开即用） ---------------- */
+let SERIES = null;   // { code, pts:[{d: Date, g: 期初=1 的收盘价累计倍数}] }
+
+// KLINE_DATA 行为 [日期,开,收,高,低,量]（新版紧凑数组），兼容旧版对象格式
+function klineRows(idx) {
+  const raw = (window.KLINE_DATA || {})[idx] || [];
+  if (!raw.length) return [];
+  return Array.isArray(raw[0]) ? raw : raw.map(r => [r.d, r.o, r.c, r.h, r.l, r.v]);
+}
+function buildIndex(idx) {
+  const rows = klineRows(idx);
+  if (!rows.length) return null;
+  const c0 = rows[0][2];
+  if (!c0) return null;
+  const pts = [];
+  for (const r of rows) {
+    if (!r[0] || !r[2]) continue;
+    pts.push({ d: new Date(r[0]), g: r[2] / c0 });
+  }
+  return pts.length ? { code: idx, pts } : null;
+}
+function updateIdxHint() {
+  const idx = $('#idx').value;
+  const rows = klineRows(idx);
+  if (!rows.length) { $('#idx-hint').textContent = '暂无日K数据：请先运行 scrape.py 或 kline_data.py 生成 kline_data.js'; return; }
+  let t = `${idx}：${rows[0][0]} ~ ${rows[rows.length - 1][0]}，共 ${rows.length.toLocaleString('en-US')} 个交易日`;
+  const m = window.KLINE_SPLICE_META;
+  if (idx === '纳指100' && m && m.prefix) t += `（${m.prefix.end} 前为 QQQ 复权价折算拼接，仅作趋势参考）`;
+  $('#idx-hint').textContent = t;
+}
+
+/* ---------------- 年份下拉框：按该指数实际年份填充，保留用户当前选择 ---------------- */
+function populateYears() {
+  if (!SERIES) return;
+  const ys = SERIES.pts.map(p => p.d.getFullYear());
+  const y0 = Math.min(...ys), y1 = Math.max(...ys);
+  const from = $('#y-from'), to = $('#y-to');
+  const keepF = from.value, keepT = to.value;
+  let fh = `<option value="${y0}">成立（${y0}）</option>`;
+  for (let y = y0 + 1; y <= y1; y++) fh += `<option value="${y}">${y} 年起</option>`;
+  from.innerHTML = fh;
+  let th = '<option value="all">至今</option>';
+  for (let y = y1 - 1; y > y0; y--) th += `<option value="${y}">${y} 年底止</option>`;
+  to.innerHTML = th;
+  from.value = keepF; if (!from.value) from.value = String(y0);
+  to.value = keepT;   if (!to.value)   to.value = 'all';
+}
+
+/* ---------------- 模拟核心 ---------------- */
+// 定投扣款日序列：每日＝每个交易日；每周/每两周＝周一为界的每周首个交易日；每月＝所选日顺延到首个交易日
+function schedule(pts, freq, day) {
+  if (freq === 'day') return pts.map((_, i) => i);
+  if (freq !== 'month') {
+    const step = freq === 'week' ? 1 : 2;
+    const out = [];
+    let lastWeek = -1;
+    for (let i = 0; i < pts.length; i++) {
+      const d = pts[i].d;
+      const wk = Math.floor((d.getTime() - 4 * 86400000) / (7 * 86400000)); // 周一为界
+      if (wk !== lastWeek) { lastWeek = wk; out.push(i); }
+    }
+    return out.filter((_, idx) => idx % step === 0);
+  }
+  const D = day | 0;
+  const out = [];
+  let curKey = '';
+  for (let i = 0; i < pts.length; i++) {
+    const d = pts[i].d;
+    const key = d.getFullYear() + '-' + d.getMonth();
+    if (key !== curKey) {          // 新月份：找本月首个「日号 >= D」的交易日，找不到则用本月第一个交易日
+      curKey = key;
+      let j = i;
+      while (j < pts.length && pts[j].d.getFullYear() === d.getFullYear() && pts[j].d.getMonth() === d.getMonth() && pts[j].d.getDate() < D) j++;
+      out.push(j < pts.length && pts[j].d.getMonth() === d.getMonth() ? j : i);
+    }
+  }
+  return out;
+}
+// XIRR（按实际日期折现的资金加权年化收益率），二分求解
+function xirr(flows) {
+  if (flows.length < 2) return null;
+  const t0 = flows[0].t;
+  const npv = r => flows.reduce((s, c) => s + c.amt / Math.pow(1 + r, (c.t - t0) / 86400000 / 365), 0);
+  let lo = -0.9999, hi = 5, flo = npv(lo), fhi = npv(hi);
+  if (flo * fhi > 0) return null;
+  for (let k = 0; k < 200; k++) {
+    const mid = (lo + hi) / 2, fm = npv(mid);
+    if (flo * fm <= 0) { hi = mid; fhi = fm; } else { lo = mid; flo = fm; }
+  }
+  return (lo + hi) / 2;
+}
+function maxDrawdown(vals) {
+  let peak = -Infinity, mdd = 0;
+  for (const v of vals) {
+    if (v > peak) peak = v;
+    if (peak > 0) mdd = Math.min(mdd, v / peak - 1);
+  }
+  return mdd * 100;
+}
+function dstr(d) { return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+
+let chart = null;
+function renderChart(labels, invested, dcaVal, lumpVal) {
+  if (!window.echarts) return;
+  if (!chart) chart = echarts.init($('#chart'));
+  const stepLine = [];
+  for (let i = 0; i < invested.length; i++) stepLine.push(i === 0 ? invested[0] : Math.max(invested[i], invested[i - 1]));
+  const tickGap = Math.max(1, Math.floor(labels.length / 7));
+  chart.setOption({
+    animation: false,
+    grid: { left: 70, right: 26, top: 38, bottom: 56 },
+    legend: { top: 4, textStyle: { color: '#6b7280', fontSize: 12 } },
+    tooltip: {
+      trigger: 'axis', backgroundColor: 'rgba(17,24,39,.92)', borderWidth: 0,
+      textStyle: { color: '#fff', fontSize: 12 },
+      valueFormatter: v => fmtMoney(Number(v), 0) + ' 元',
+    },
+    xAxis: {
+      type: 'category', data: labels, boundaryGap: false,
+      axisLine: { lineStyle: { color: '#e5e7eb' } }, axisTick: { show: false },
+      axisLabel: { color: '#9ca3af', fontSize: 11, interval: tickGap - 1,
+        formatter: v => v.slice(0, 4) + '/' + parseInt(v.slice(5, 7), 10) },
+    },
+    yAxis: {
+      type: 'value', scale: true, splitLine: { lineStyle: { color: '#f1f2f4' } },
+      axisLabel: { color: '#9ca3af', fontSize: 11,
+        formatter: v => Math.abs(v) >= 1e4 ? (v / 1e4).toFixed(1) + '万' : v },
+    },
+    series: [
+      { name: '累计投入', type: 'line', data: stepLine, symbol: 'none', step: 'end',
+        lineStyle: { color: '#9ca3af', width: 1.4 }, itemStyle: { color: '#9ca3af' } },
+      { name: '定投市值', type: 'line', data: dcaVal, symbol: 'none',
+        lineStyle: { color: '#1d4ed8', width: 2 }, itemStyle: { color: '#1d4ed8' } },
+      { name: '假如起点一次全买', type: 'line', data: lumpVal, symbol: 'none',
+        lineStyle: { color: '#f59e0b', width: 1.6, type: 'dashed' }, itemStyle: { color: '#f59e0b' } },
+    ],
+  }, true);
+  chart.resize();
+}
+
+function run() {
+  const amount = Number($('#amount').value);
+  if (!(amount > 0)) { showMsg('每次投入需大于 0 元'); return; }
+  const s = buildIndex($('#idx').value);
+  if (!s || s.pts.length < 30) { showMsg('指数日K数据不足：请先运行 scrape.py 生成 kline_data.js'); return; }
+  SERIES = s;
+  populateYears();
+  const yf = $('#y-from').value, yt = $('#y-to').value;
+  if (yf !== 'all' && yt !== 'all' && Number(yf) > Number(yt)) { showMsg('起始年份不能晚于结束年份'); return; }
+  const pts = SERIES.pts.filter(p =>
+    (yf === 'all' || p.d.getFullYear() >= Number(yf)) &&
+    (yt === 'all' || p.d.getFullYear() <= Number(yt)));
+  if (pts.length < 30) { showMsg('该区间内交易日不足，请放宽区间'); return; }
+  showMsg('');
+  const freq = $('#freq').value;
+  const D = Number($('#day').value);
+  const A = amount;
+  const buyIdx = schedule(pts, freq, D);
+
+  // 定投与对照：市值 = 投入 × 期末/买入时的收盘价累计倍数（g，期初=1，指数无分红即价格回报）
+  let units = 0, invested = 0, bi = 0;
+  const lumpMoney = A * buyIdx.length;
+  const lumpUnits = buyIdx.length ? lumpMoney / pts[buyIdx[0]].g : 0;
+  const labels = [], dcaVal = [], invLine = [], lumpVal = [];
+  for (let i = 0; i < pts.length; i++) {
+    if (bi < buyIdx.length && buyIdx[bi] === i) { units += A / pts[i].g; invested += A; bi++; }
+    labels.push(dstr(pts[i].d));
+    dcaVal.push(units * pts[i].g);
+    invLine.push(invested);
+    lumpVal.push(lumpUnits * pts[i].g);
+  }
+  const endAsset = dcaVal[dcaVal.length - 1];
+  const cumRet = invested > 0 ? (endAsset / invested - 1) * 100 : 0;
+  const flows = buyIdx.map(i => ({ t: pts[i].d.getTime(), amt: -A }));
+  flows.push({ t: pts[pts.length - 1].d.getTime(), amt: endAsset });
+  const r = xirr(flows);
+  const lumpRet = lumpMoney > 0 ? (lumpVal[lumpVal.length - 1] / lumpMoney - 1) * 100 : 0;
+  const days = (pts[pts.length - 1].d - pts[0].d) / 86400000;
+
+  const stats = [
+    { lbl: '模拟区间', val: days < 400 ? Math.round(days / 30) + ' 个月' : (days / 365).toFixed(1) + ' 年' },
+    { lbl: '扣款次数', val: buyIdx.length + ' 次' },
+    { lbl: '累计投入', val: fmtMoney(invested, 0) + ' 元' },
+    { lbl: '期末资产', val: fmtMoney(endAsset, 0) + ' 元' },
+    { lbl: '累计收益率', val: (cumRet >= 0 ? '+' : '') + cumRet.toFixed(2) + '%',
+      cls: cumRet >= 0 ? 'up' : 'down' },
+    { lbl: '年化收益率（IRR）', val: r === null || !isFinite(r) ? '—' : (r >= 0 ? '+' : '') + (r * 100).toFixed(2) + '%',
+      cls: r !== null && isFinite(r) ? (r >= 0 ? 'up' : 'down') : '' },
+    { lbl: '持仓最大回撤', val: mdd2txt(maxDrawdown(dcaVal)) },
+    { lbl: '假如起点一次全买', val: (lumpRet >= 0 ? '+' : '') + lumpRet.toFixed(2) + '%',
+      cls: lumpRet >= 0 ? 'up' : 'down' },
+  ];
+  $('#stats').innerHTML = stats.map(x =>
+    `<div class="stat"><div class="lbl">${x.lbl}</div><div class="val ${x.cls || ''}">${x.val}</div></div>`).join('');
+  $('#stats').style.display = 'grid';
+  $('#chart-card').style.display = 'block';
+  renderChart(labels, invLine, dcaVal, lumpVal);
+}
+function mdd2txt(v) { return (v <= -0.005 ? v.toFixed(2) : '0') + '%'; }
+
+/* ---------------- 事件 ---------------- */
+$('#run').addEventListener('click', run);
+$('#freq').addEventListener('change', () => { $('#day-fld').style.opacity = $('#freq').value === 'month' ? '1' : '.4'; });
+$('#idx').addEventListener('change', () => { $('#y-from').value = ''; $('#y-to').value = ''; updateIdxHint(); prepSeries(); });
+window.addEventListener('resize', () => { if (chart) chart.resize(); });
+
+/* 打开页面即读取本地指数日K（kline_data.js），把年份下拉按实际年份填好。
+   图表等用户选好起止年份、点「开始模拟」后才渲染（run()）。 */
+function prepSeries() {
+  $('#y-from').innerHTML = '<option value="">加载中…</option>';
+  $('#y-to').innerHTML = '<option value="">加载中…</option>';
+  const s = buildIndex($('#idx').value);
+  if (!s) { showMsg('指数日K数据缺失：请先运行 scrape.py 或 kline_data.py 生成 kline_data.js'); return; }
+  SERIES = s;
+  populateYears();
+  updateIdxHint();
+  showMsg('年份选项已就绪 —— 选好起止年份后，点「开始模拟」生成回测图', 'wait');
+}
+prepSeries();
+</script>
+</body>
+</html>

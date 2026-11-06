@@ -4,7 +4,29 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>纳指100 / 标普500 日K线</title>
-<script src="echarts.min.js"></script>
+<script>
+/* echarts 组件库本地缓存：页面加载过一次后存入 localStorage，之后访客秒开。
+   升级 echarts.min.js 时请同步把 KEY 里的版本号改一下，旧缓存自动失效。 */
+(function () {
+  var KEY = 'echarts.cache.5.5.1';
+  try {
+    var code = localStorage.getItem(KEY);
+    if (code && code.indexOf('</' + 'script') === -1) {
+      document.write('<scr' + 'ipt>' + code + '<\/scr' + 'ipt>');
+      return;
+    }
+  } catch (e) { /* 隐私模式等不支持 localStorage，走正常加载 */ }
+  document.write('<scr' + 'ipt src="echarts.min.js"><\/scr' + 'ipt>');
+  window.addEventListener('load', function () {
+    if (!window.echarts || !window.fetch) return;
+    fetch('echarts.min.js').then(function (r) { return r.text(); }).then(function (t) {
+      if (t && t.indexOf('</' + 'script') === -1) {
+        try { localStorage.setItem(KEY, t); } catch (e) { /* 超出配额则放弃缓存 */ }
+      }
+    }).catch(function () {});
+  });
+})();
+</script>
 <style>
   :root {
     --bg: #f5f6f8; --card: #ffffff; --border: #e5e7eb; --text: #1f2937; --muted: #6b7280;
