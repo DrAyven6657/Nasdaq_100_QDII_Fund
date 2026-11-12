@@ -1,5 +1,5 @@
 window.FUND_DATA = {
-  "updated": "2026-11-11 23:42:05",
+  "updated": "2026-11-12 10:44:00",
   "note": "QDII 净值为滞后净值（T+1/T+2）。代销额度=天天基金渠道（单日限购金额）。",
   "funds": [
     {
@@ -71,7 +71,7 @@ window.FUND_DATA = {
       "ret_1y": 2.1,
       "otc_status": "限大额",
       "otc_limit": "单日10元",
-      "tracking_error": 2.33,
+      "tracking_error": 2.32,
       "fee_mgmt": 0.8,
       "fee_custodian": 0.2,
       "fee_sales": 0.0,
@@ -90,7 +90,7 @@ window.FUND_DATA = {
       "ret_1y": 2.25,
       "otc_status": "限大额",
       "otc_limit": "单日10元",
-      "tracking_error": 1.44,
+      "tracking_error": 1.43,
       "fee_mgmt": 0.5,
       "fee_custodian": 0.15,
       "fee_sales": 0.0,
@@ -147,7 +147,7 @@ window.FUND_DATA = {
       "ret_1y": 0.36,
       "otc_status": "暂停申购",
       "otc_limit": null,
-      "tracking_error": 1.76,
+      "tracking_error": 1.75,
       "fee_mgmt": 0.5,
       "fee_custodian": 0.15,
       "fee_sales": 0.0,
@@ -299,7 +299,7 @@ window.FUND_DATA = {
       "ret_1y": 3.39,
       "otc_status": "暂停申购",
       "otc_limit": null,
-      "tracking_error": 1.53,
+      "tracking_error": 1.52,
       "fee_mgmt": 0.5,
       "fee_custodian": 0.1,
       "fee_sales": 0.0,
@@ -337,7 +337,7 @@ window.FUND_DATA = {
       "ret_1y": 6.27,
       "otc_status": "暂停申购",
       "otc_limit": null,
-      "tracking_error": 3.0,
+      "tracking_error": 2.99,
       "fee_mgmt": 0.8,
       "fee_custodian": 0.2,
       "fee_sales": 0.0,
@@ -375,7 +375,7 @@ window.FUND_DATA = {
       "ret_1y": 3.94,
       "otc_status": "暂停申购",
       "otc_limit": null,
-      "tracking_error": 2.18,
+      "tracking_error": 2.17,
       "fee_mgmt": 0.6,
       "fee_custodian": 0.15,
       "fee_sales": 0.0,
@@ -424,15 +424,15 @@ window.FUND_DATA = {
   "index_quotes": {
     "纳指100": {
       "name": "纳斯达克100",
-      "price": 28311.76,
-      "change": 570.96,
-      "pct": 2.06
+      "price": 28374.25,
+      "change": 633.45,
+      "pct": 2.28
     },
     "标普500": {
       "name": "标普500",
-      "price": 7595.01,
-      "change": 74.08,
-      "pct": 0.98
+      "price": 7619.38,
+      "change": 98.45,
+      "pct": 1.31
     }
   }
 };
