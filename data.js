@@ -1,5 +1,5 @@
 window.FUND_DATA = {
-  "updated": "2026-11-13 00:28:44",
+  "updated": "2026-11-13 10:20:09",
   "note": "QDII 净值为滞后净值（T+1/T+2）。代销额度=天天基金渠道（单日限购金额）。",
   "funds": [
     {
@@ -71,7 +71,7 @@ window.FUND_DATA = {
       "ret_1y": 4.63,
       "otc_status": "限大额",
       "otc_limit": "单日10元",
-      "tracking_error": 2.32,
+      "tracking_error": 2.31,
       "fee_mgmt": 0.8,
       "fee_custodian": 0.2,
       "fee_sales": 0.0,
@@ -128,7 +128,7 @@ window.FUND_DATA = {
       "ret_1y": 5.42,
       "otc_status": "限大额",
       "otc_limit": "单日10元",
-      "tracking_error": 2.31,
+      "tracking_error": 2.3,
       "fee_mgmt": 0.5,
       "fee_custodian": 0.1,
       "fee_sales": 0.0,
@@ -147,7 +147,7 @@ window.FUND_DATA = {
       "ret_1y": 2.85,
       "otc_status": "暂停申购",
       "otc_limit": null,
-      "tracking_error": 1.75,
+      "tracking_error": 1.73,
       "fee_mgmt": 0.5,
       "fee_custodian": 0.15,
       "fee_sales": 0.0,
@@ -166,7 +166,7 @@ window.FUND_DATA = {
       "ret_1y": 4.92,
       "otc_status": "限大额",
       "otc_limit": "单日5元",
-      "tracking_error": 1.62,
+      "tracking_error": 1.61,
       "fee_mgmt": 0.5,
       "fee_custodian": 0.15,
       "fee_sales": 0.0,
@@ -204,7 +204,7 @@ window.FUND_DATA = {
       "ret_1y": 5.56,
       "otc_status": "限大额",
       "otc_limit": "单日5元",
-      "tracking_error": 2.21,
+      "tracking_error": 2.2,
       "fee_mgmt": 0.5,
       "fee_custodian": 0.15,
       "fee_sales": 0.0,
@@ -242,7 +242,7 @@ window.FUND_DATA = {
       "ret_1y": 5.2,
       "otc_status": "暂停申购",
       "otc_limit": null,
-      "tracking_error": 1.1,
+      "tracking_error": 1.11,
       "fee_mgmt": 0.8,
       "fee_custodian": 0.2,
       "fee_sales": null,
@@ -413,7 +413,7 @@ window.FUND_DATA = {
       "ret_1y": 6.16,
       "otc_status": "限大额",
       "otc_limit": "单日10元",
-      "tracking_error": 1.58,
+      "tracking_error": 1.57,
       "fee_mgmt": 0.5,
       "fee_custodian": 0.15,
       "fee_sales": 0.0,
@@ -424,15 +424,15 @@ window.FUND_DATA = {
   "index_quotes": {
     "纳指100": {
       "name": "纳斯达克100",
-      "price": 28472.0,
-      "change": 97.75,
-      "pct": 0.34
+      "price": 28289.19,
+      "change": -85.06,
+      "pct": -0.3
     },
     "标普500": {
       "name": "标普500",
-      "price": 7641.23,
-      "change": 21.85,
-      "pct": 0.29
+      "price": 7592.4,
+      "change": -26.98,
+      "pct": -0.35
     }
   }
 };
