@@ -1,5 +1,5 @@
 {
-  "updated": "2026-11-13 23:52:28",
+  "updated": "2026-11-14 09:56:24",
   "note": "QDII 净值为滞后净值（T+1/T+2）。代销额度=天天基金渠道（单日限购金额）。",
   "funds": [
     {
@@ -109,7 +109,7 @@
       "ret_1y": 4.71,
       "otc_status": "暂停申购",
       "otc_limit": null,
-      "tracking_error": 1.52,
+      "tracking_error": 1.51,
       "fee_mgmt": 0.5,
       "fee_custodian": 0.1,
       "fee_sales": 0.0,
@@ -318,7 +318,7 @@
       "ret_1y": 5.85,
       "otc_status": "暂停申购",
       "otc_limit": null,
-      "tracking_error": 1.51,
+      "tracking_error": 1.5,
       "fee_mgmt": 0.5,
       "fee_custodian": 0.15,
       "fee_sales": 0.0,
@@ -424,15 +424,15 @@
   "index_quotes": {
     "纳指100": {
       "name": "纳斯达克100",
-      "price": 27788.32,
-      "change": -500.87,
-      "pct": -1.77
+      "price": 27943.74,
+      "change": -345.45,
+      "pct": -1.22
     },
     "标普500": {
       "name": "标普500",
-      "price": 7536.85,
-      "change": -55.55,
-      "pct": -0.73
+      "price": 7561.67,
+      "change": -30.73,
+      "pct": -0.4
     }
   }
 }
