@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#f5f6f8">
+<title>纳指100 / 标普500 日K线</title>
+<script>
+/* echarts 组件库本地缓存：页面加载过一次后存入 localStorage，之后访客秒开。
+   升级 echarts.min.js 时请同步把 KEY 里的版本号改一下，旧缓存自动失效。 */
+(function () {
+  var KEY = 'echarts.cache.5.5.1';
+  try {
+    var code = localStorage.getItem(KEY);
+    if (code && code.indexOf('</' + 'script') === -1) {
+      document.write('<scr' + 'ipt>' + code + '<\/scr' + 'ipt>');
+      return;
+    }
+  } catch (e) { /* 隐私模式等不支持 localStorage，走正常加载 */ }
+  document.write('<scr' + 'ipt src="echarts.min.js"><\/scr' + 'ipt>');
+  window.addEventListener('load', function () {
+    if (!window.echarts || !window.fetch) return;
+    fetch('echarts.min.js').then(function (r) { return r.text(); }).then(function (t) {
+      if (t && t.indexOf('</' + 'script') === -1) {
+        try { localStorage.setItem(KEY, t); } catch (e) { /* 超出配额则放弃缓存 */ }
+      }
+    }).catch(function () {});
+  });
+})();
+</script>
+<style>
+  :root {
+    color-scheme: light;
+    --bg: #f5f6f8; --card: #ffffff; --card-2: #f3f5f8;
+    --border: #e5e7eb; --border-soft: #f1f2f4; --text: #1f2937;
+    --muted: #6b7280; --up: #dc2626; --down: #16a34a;
+    --ma5: #f59e0b; --ma20: #7c3aed; --ma50: #db2777; --ma200: #0d9488;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scrollbar-color: #cbd5e1 transparent; }
+  body { font-family: -apple-system, "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif;
+    background: var(--bg); color: var(--text); line-height: 1.5; padding: 24px 16px 60px; }
+  .container { max-width: 1080px; margin: 0 auto; }
+  header h1 { font-size: 20px; font-weight: 700; margin-bottom: 4px; }
+  header .sub { color: var(--muted); font-size: 13px; margin-bottom: 16px; }
+  .chart-block { background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+    padding: 14px 16px 8px; margin-bottom: 16px; }
+  .chart-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px 16px; margin-bottom: 6px; }
+  .chart-title { font-size: 15px; font-weight: 700; }
+  .chart-price { font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .chart-price.up { color: var(--up); } .chart-price.down { color: var(--down); }
+  .chart-chg { font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .chart-chg.up { color: var(--up); } .chart-chg.down { color: var(--down); }
+  .legend { display: inline-flex; gap: 12px; font-size: 12px; color: var(--muted); margin-left: auto; }
+  .legend i { display: inline-block; width: 14px; height: 3px; border-radius: 2px; vertical-align: middle; margin-right: 4px; }
+  .range { display: inline-flex; gap: 4px; flex-wrap: wrap; }
+  .range button { border: 1px solid var(--border); background: #fff; color: var(--muted);
+    padding: 2px 9px; border-radius: 6px; cursor: pointer; font-size: 12px; transition: all .15s; }
+  .range button:hover { border-color: var(--accent, #1d4ed8); color: var(--accent, #1d4ed8); }
+  .range button.active { background: var(--text); color: #fff; border-color: var(--text); font-weight: 600; }
+  a:focus-visible, button:focus-visible { outline: 2px solid #3b82f6; outline-offset: 2px; }
+  .chart-wrap { height: 480px; }
+  .chart-sub { font-size: 12px; color: var(--muted); margin: 2px 0 6px; font-variant-numeric: tabular-nums; }
+  .chart-sub b { color: var(--text); font-weight: 600; }
+  @media (max-width: 720px) { .chart-wrap { height: 340px; } }
+  footer { text-align: center; color: var(--muted); font-size: 12px; margin-top: 16px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <h1>纳指100 / 标普500 日K线</h1>
+    <div class="sub">数据源：东方财富（US 指数日K） · 红涨绿跌 · 悬停看开高低收 · 滚轮 / 底部滑杆拖拽缩放<span id="splice-note"></span></div>
+  </header>
+
+  <div class="chart-block" data-idx="纳指100">
+    <div class="chart-head">
+      <span class="chart-title">纳斯达克100</span>
+      <span class="chart-price" id="price-纳指100">—</span>
+      <span class="chart-chg" id="chg-纳指100">—</span>
+      <span class="legend">
+        <span><i style="background:var(--ma5)"></i>MA5 <b id="ma5-纳指100">—</b></span>
+        <span><i style="background:var(--ma20)"></i>MA20 <b id="ma20-纳指100">—</b></span>
+        <span><i style="background:var(--ma50)"></i>MA50 <b id="ma50-纳指100">—</b></span>
+        <span><i style="background:var(--ma200)"></i>MA200 <b id="ma200-纳指100">—</b></span>
+      </span>
+      <span class="range" id="range-纳指100"></span>
+    </div>
+    <div class="chart-sub" id="info-纳指100"></div>
+    <div class="chart-wrap" id="wrap-纳指100"></div>
+  </div>
+
+  <div class="chart-block" data-idx="标普500">
+    <div class="chart-head">
+      <span class="chart-title">标普500</span>
+      <span class="chart-price" id="price-标普500">—</span>
+      <span class="chart-chg" id="chg-标普500">—</span>
+      <span class="legend">
+        <span><i style="background:var(--ma5)"></i>MA5 <b id="ma5-标普500">—</b></span>
+        <span><i style="background:var(--ma20)"></i>MA20 <b id="ma20-标普500">—</b></span>
+        <span><i style="background:var(--ma50)"></i>MA50 <b id="ma50-标普500">—</b></span>
+        <span><i style="background:var(--ma200)"></i>MA200 <b id="ma200-标普500">—</b></span>
+      </span>
+      <span class="range" id="range-标普500"></span>
+    </div>
+    <div class="chart-sub" id="info-标普500"></div>
+    <div class="chart-wrap" id="wrap-标普500"></div>
+  </div>
+
+  <footer>日K数据由 kline_data.py 生成（kline_data.js），双击本页需先运行该脚本刷新数据</footer>
+</div>
+
+<script src="kline_echarts.js"></script>
+<script src="kline_data.js"></script>
+<script>
+// 渲染引擎为共用模块 kline_echarts.js（Apache ECharts 本地化部署）
+// 纳指100 拼接口径说明（接缝信息由 kline_data.js 的 KLINE_SPLICE_META 提供）
+(function () {
+  const m = window.KLINE_SPLICE_META;
+  const el = document.getElementById('splice-note');
+  if (el && m && m.prefix) {
+    el.textContent = ' · 纳斯达克100：' + m.prefix.end + ' 前为 QQQ 复权价折算拼接，仅作趋势参考';
+  }
+})();
+['纳指100', '标普500'].forEach(function (idx) {
+  window.KLINE_ECHARTS.init({
+    idx: idx,
+    elId: 'wrap-' + idx,
+    priceId: 'price-' + idx,
+    chgId: 'chg-' + idx,
+    infoId: 'info-' + idx,
+    maIds: { ma5: 'ma5-' + idx, ma20: 'ma20-' + idx, ma50: 'ma50-' + idx, ma200: 'ma200-' + idx },
+    rangeBoxId: 'range-' + idx,
+  });
+});
+</script>
+</body>
+</html>

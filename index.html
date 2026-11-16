@@ -1,0 +1,661 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#f5f6f8">
+<title>纳指100 / 标普500 QDII 基金 · 场外额度监控</title>
+<style>
+  :root {
+    color-scheme: light;
+    --bg: #f5f6f8; --card: #ffffff; --card-2: #f3f5f8;
+    --border: #e5e7eb; --border-soft: #f1f2f4; --text: #1f2937;
+    --muted: #6b7280; --up: #dc2626; --down: #16a34a;
+    --idx100: #2563eb; --idx500: #ea580c; --idxtech: #7c3aed;
+    --accent: #1d4ed8; --accent-soft: #3b82f6;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scrollbar-color: #cbd5e1 transparent; }
+  body {
+    font-family: -apple-system, "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif;
+    background: var(--bg); color: var(--text); line-height: 1.5; padding: 24px 16px 60px;
+  }
+  .container { max-width: 1200px; margin: 0 auto; }
+  header { margin-bottom: 16px; }
+  header h1 { font-size: 22px; font-weight: 700; }
+  header .sub { color: var(--muted); font-size: 13px; margin-top: 4px; }
+  .note {
+    background: #fff7ed; border: 1px solid #fed7aa; color: #9a3412;
+    border-radius: 8px; padding: 10px 14px; font-size: 12.5px; margin: 12px 0;
+  }
+  .toolbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 14px 0; }
+  .toolbar .grp { display: inline-flex; gap: 6px; align-items: center; }
+  .toolbar .lbl { font-size: 12px; color: var(--muted); margin-right: 2px; }
+  .toolbar button {
+    border: 1px solid var(--border); background: var(--card); color: var(--text);
+    padding: 5px 13px; border-radius: 16px; cursor: pointer; font-size: 13px; transition: all .15s;
+  }
+  .toolbar button:hover { border-color: var(--accent); color: var(--accent-soft); }
+  .toolbar button.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+  a:focus-visible, button:focus-visible { outline: 2px solid var(--accent-soft); outline-offset: 2px; }
+  .meta { color: var(--muted); font-size: 12.5px; margin-left: auto; }
+  .table-wrap { background: var(--card); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; font-variant-numeric: tabular-nums; }
+  thead th {
+    position: sticky; top: 0; background: #fafbfc; color: var(--muted);
+    text-align: right; font-weight: 600; padding: 11px 12px; white-space: nowrap;
+    border-bottom: 1px solid var(--border); cursor: pointer; user-select: none; z-index: 1;
+  }
+  thead th:hover { color: var(--accent-soft); }
+  thead th.left, td.left { text-align: left; }
+  thead th.no-sort { cursor: default; }
+  tbody td { padding: 10px 12px; text-align: right; white-space: nowrap; border-bottom: 1px solid var(--border-soft); }
+  tbody tr:hover { background: var(--card-2); }
+  /* 分组标题行 */
+  tr.group-row td {
+    background: #eef2ff; text-align: left; font-weight: 700; color: #3730a3;
+    padding: 8px 12px; border-bottom: 1px solid #dbeafe; font-size: 13.5px; cursor: default;
+  }
+  tr.group-row.otc td { background: #ecfdf5; color: #065f46; border-bottom: 1px solid #a7f3d0; }
+  tr.group-row td:hover { background: inherit; }
+  .code { font-family: ui-monospace, "SF Mono", Consolas, monospace; color: var(--muted); }
+  .name { font-weight: 600; text-align: left !important; }
+  .tag { display: inline-block; font-size: 11px; padding: 1px 7px; border-radius: 4px; font-weight: 600; }
+  .tag.idx100 { background: rgba(37,99,235,.09); color: #1d4ed8; border: 1px solid rgba(37,99,235,.28); }
+  .tag.idx500 { background: rgba(234,88,12,.09); color: #c2410c; border: 1px solid rgba(234,88,12,.28); }
+  .tag.idxtech { background: rgba(124,58,237,.09); color: #6d28d9; border: 1px solid rgba(124,58,237,.28); }
+  .premium { font-weight: 700; } .premium.pos { color: var(--up); } .premium.neg { color: var(--down); }
+  .limit { color: var(--up); font-weight: 600; }
+  .status-pause { color: var(--up); font-weight: 600; }
+  .status-open { color: var(--down); font-weight: 600; }
+  /* 近1年收益率 进度条 */
+  .ret-bar-wrap { position: relative; height: 22px; border-radius: 5px; overflow: hidden; background: #f3f4f6; min-width: 90px; }
+  .ret-bar-fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 5px;
+    background: linear-gradient(90deg, #fde6e6 0%, #f9b4b4 50%, #ef4444 100%); }
+  .ret-bar-fill.neg { background: linear-gradient(90deg, #e2f5e6 0%, #9fe0ab 50%, #16a34a 100%); }
+  .ret-bar-text { position: relative; z-index: 1; line-height: 22px; padding: 0 8px;
+    font-weight: 700; font-size: 12.5px; color: #111827; font-variant-numeric: tabular-nums; text-align: right; }
+  .muted { color: var(--muted); }
+  .sort-ind { color: var(--accent-soft); font-size: 11px; }
+  footer { text-align: center; color: var(--muted); font-size: 12px; margin-top: 20px; }
+  /* 指数行情卡片 */
+  .quotes { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 14px 0; }
+  .quote-card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 14px 18px;
+    display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+  .quote-main { min-width: 0; }
+  .spark { width: 128px; height: 44px; flex: none; }
+  .quote-card.up { background: #fdeeee; border-color: #f5c9c9; }
+  .quote-card.down { background: #e9f8ee; border-color: #c1e4ce; }
+  .quote-name { font-size: 13px; color: var(--muted); font-weight: 600; margin-bottom: 4px; display: flex; align-items: center; gap: 7px; }
+  .quote-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; flex: none; }
+  .quote-dot.ndx { background: var(--idx100); }
+  .quote-dot.spx { background: var(--idx500); }
+  .quote-price { font-size: 30px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.15; }
+  .quote-change { font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; margin-top: 3px; }
+  .quote-price.up, .quote-change.up { color: var(--up); }
+  .quote-price.down, .quote-change.down { color: var(--down); }
+  .quote-price.flat, .quote-change.flat { color: var(--muted); }
+  /* 指数估值 · 风险位置（五档横条 + 分位指针） */
+  .valuation-card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 14px 18px; margin: 14px 0 16px; }
+  .val-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px 12px; margin-bottom: 12px; }
+  .val-title { font-size: 15px; font-weight: 700; }
+  .val-note { font-size: 11.5px; color: var(--muted); }
+  .val-row { display: grid; grid-template-columns: 96px 1fr 220px; gap: 14px; align-items: center; padding: 8px 0; }
+  .val-row + .val-row { border-top: 1px dashed var(--border-soft); }
+  .val-name { font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 7px; }
+  .val-meter { min-width: 0; }
+  .meter { position: relative; height: 12px; border-radius: 6px; }
+  .meter::before { content: ""; position: absolute; inset: 0; border-radius: 6px;
+    background: linear-gradient(90deg, #16a34a 0 20%, #86efac 0 40%, #fde047 0 60%, #fb923c 0 80%, #dc2626 0 100%); }
+  .meter-pt { position: absolute; top: 50%; width: 13px; height: 13px; border-radius: 50%;
+    background: var(--text); border: 2.5px solid #fff; box-shadow: 0 0 0 1px rgba(0,0,0,.18), 0 1px 3px rgba(0,0,0,.2);
+    transform: translate(-50%, -50%); }
+  .meter-scale { display: flex; margin-top: 4px; }
+  .meter-scale span { width: 20%; text-align: center; font-size: 10.5px; color: var(--muted); }
+  .val-nums { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; font-variant-numeric: tabular-nums; }
+  .val-pe { font-size: 12.5px; color: var(--muted); }
+  .val-pe b { color: var(--text); font-size: 16px; font-weight: 700; margin-left: 3px; }
+  .val-pct { font-size: 11.5px; font-weight: 700; }
+  .lvl-0 { color: #15803d; } .lvl-1 { color: #16a34a; } .lvl-2 { color: #ca8a04; } .lvl-3 { color: #ea580c; } .lvl-4 { color: #dc2626; }
+  .val-src { margin-top: 10px; font-size: 11.5px; color: var(--muted); }
+  @media (max-width: 720px) {
+    .val-row { grid-template-columns: 78px 1fr; }
+    .val-nums { grid-column: 1 / -1; flex-direction: row; align-items: baseline; justify-content: space-between; }
+  }
+  /* 指数日K线 */
+  .kline-title { font-size: 15px; font-weight: 700; margin: 18px 0 10px; }
+  .kline-note { font-size: 12px; font-weight: 400; color: var(--muted); margin-left: 8px; }
+  .kline-tabs { display: inline-flex; gap: 6px; margin-bottom: 12px; }
+  .kline-tabs button { border: 1px solid var(--border); background: var(--card); color: var(--muted);
+    padding: 6px 16px; border-radius: 16px; cursor: pointer; font-size: 13px; transition: all .15s; }
+  .kline-tabs button:hover { border-color: var(--accent); color: var(--accent-soft); }
+  .kline-tabs button.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .chart-sub { font-size: 12px; color: var(--muted); margin: 2px 0 6px; font-variant-numeric: tabular-nums; }
+  .chart-sub b { color: var(--text); font-weight: 600; }
+  .chart-block { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px 8px; margin-bottom: 16px; }
+  .chart-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px 16px; margin-bottom: 6px; }
+  .chart-title { font-size: 15px; font-weight: 700; }
+  .chart-price { font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .chart-price.up { color: var(--up); } .chart-price.down { color: var(--down); }
+  .chart-chg { font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .chart-chg.up { color: var(--up); } .chart-chg.down { color: var(--down); }
+  .legend { display: inline-flex; gap: 12px; font-size: 12px; color: var(--muted); margin-left: auto; }
+  .legend i { display: inline-block; width: 14px; height: 3px; border-radius: 2px; vertical-align: middle; margin-right: 4px; }
+  .range { display: inline-flex; gap: 4px; flex-wrap: wrap; }
+  .range button { border: 1px solid var(--border); background: #fff; color: var(--muted); padding: 2px 9px; border-radius: 6px; cursor: pointer; font-size: 12px; transition: all .15s; }
+  .range button:hover { border-color: var(--accent); color: var(--accent); }
+  .range button.active { background: var(--text); color: #fff; border-color: var(--text); font-weight: 600; }
+  .chart-wrap { height: 480px; }
+  @media (max-width: 720px) {
+    header h1 { font-size: 18px; }
+    table { font-size: 12px; }
+    .quotes { grid-template-columns: 1fr; }
+    .quote-price { font-size: 24px; }
+    .chart-wrap { height: 340px; }
+    /* 手机端：额度表改卡片式，避免横向溢出 */
+    .table-wrap { border: 0; border-radius: 0; background: none; overflow: visible; }
+    thead { display: none; }
+    tbody tr { display: block; background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+      padding: 6px 12px; margin-bottom: 8px; }
+    tbody td { display: flex; justify-content: space-between; align-items: center; gap: 12px;
+      padding: 4px 0; border-bottom: 0; white-space: normal; text-align: right; }
+    tbody td::before { content: attr(data-label); color: var(--muted); font-size: 11px; }
+    tbody td.name { display: block; padding: 4px 0 6px; font-size: 13px; }
+    tbody td.name::before { content: none; }
+    tr.group-row { padding: 4px 12px; margin-bottom: 8px; }
+    tr.group-row td { display: block; padding: 2px 0; }
+  }
+  footer a { color: var(--accent-soft); text-decoration: none; }
+  .dca-btn { background: var(--accent); border: 1px solid var(--accent); color: #fff;
+    padding: 5px 14px; border-radius: 16px; font-size: 13px; font-weight: 600;
+    text-decoration: none; transition: all .15s; display: inline-block; }
+  .dca-btn:hover { filter: brightness(1.18); }
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <h1>纳指100 / 标普500 QDII 基金 · 场外额度监控</h1>
+    <div class="sub">场外指数基金（A 类）申购状态与限购额度</div>
+  </header>
+
+  <div class="note">
+    <b>代销额度</b>=天天基金等第三方渠道（单日限购金额）。QDII 净值为滞后净值（T+1/T+2）。<br>
+    暂停申购的基金不显示限购金额（无法买入）。
+  </div>
+
+  <div class="toolbar">
+    <span class="grp">
+      <span class="lbl">指数</span>
+      <button data-filter="idx" data-val="all">全部</button>
+      <button data-filter="idx" data-val="纳指100" class="active">纳斯达克100</button>
+      <button data-filter="idx" data-val="标普500">标普500</button>
+      <button data-filter="idx" data-val="纳指科技">纳指科技</button>
+    </span>
+    <span class="grp">
+      <a class="dca-btn" href="dca.html">📈 定投模拟</a>
+    </span>
+    <span class="meta" id="updated"></span>
+  </div>
+
+  <div class="quotes">
+    <div class="quote-card" data-idx="纳指100">
+      <div class="quote-main">
+        <div class="quote-name"><span class="quote-dot ndx"></span>纳斯达克100</div>
+        <div class="quote-price" id="price-ndx">—</div>
+        <div class="quote-change" id="change-ndx">—</div>
+      </div>
+      <svg class="spark" id="spark-ndx" viewBox="0 0 120 40" preserveAspectRatio="none" aria-hidden="true"></svg>
+    </div>
+    <div class="quote-card" data-idx="标普500">
+      <div class="quote-main">
+        <div class="quote-name"><span class="quote-dot spx"></span>标普500</div>
+        <div class="quote-price" id="price-spx">—</div>
+        <div class="quote-change" id="change-spx">—</div>
+      </div>
+      <svg class="spark" id="spark-spx" viewBox="0 0 120 40" preserveAspectRatio="none" aria-hidden="true"></svg>
+    </div>
+  </div>
+
+  <div class="valuation-card" id="valuation-card" style="display:none">
+    <div class="val-head">
+      <span class="val-title">指数估值 · 风险位置</span>
+      <span class="val-note">横条按「近10年 PE 分位」分五档：越靠右 = 当前越贵，回撤风险越大</span>
+    </div>
+    <div id="valuation-rows"></div>
+    <div class="val-src" id="val-src"></div>
+  </div>
+
+  <div class="table-wrap">
+    <table id="tbl">
+      <thead>
+        <tr>
+          <th class="left no-sort">基金名称</th>
+          <th class="left no-sort">代码</th>
+          <th class="left no-sort">指数</th>
+          <th data-sort="nav">单位净值</th>
+          <th data-sort="ret_1y">近1年</th>
+          <th data-sort="otc">申购状态</th>
+          <th data-sort="otc_limit">代销额度</th>
+          <th class="no-sort">跟踪误差</th>
+          <th class="no-sort">费率(年)</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <div class="kline-title" id="kline-title">指数日K线<span class="kline-note" id="kline-note"></span></div>
+  <div class="kline-tabs" id="kline-tabs" style="display:none">
+    <button data-idx="纳指100" class="active">纳斯达克100</button>
+    <button data-idx="标普500">标普500</button>
+  </div>
+  <div class="chart-block" data-idx="纳指100">
+    <div class="chart-head">
+      <span class="chart-title">纳斯达克100</span>
+      <span class="chart-price" id="price-纳指100">—</span>
+      <span class="chart-chg" id="chg-纳指100">—</span>
+      <span class="legend">
+        <span><i style="background:#f59e0b"></i>MA5 <b id="ma5-纳指100">—</b></span>
+        <span><i style="background:#7c3aed"></i>MA20 <b id="ma20-纳指100">—</b></span>
+        <span><i style="background:#db2777"></i>MA50 <b id="ma50-纳指100">—</b></span>
+        <span><i style="background:#0d9488"></i>MA200 <b id="ma200-纳指100">—</b></span>
+      </span>
+      <span class="range" id="range-纳指100"></span>
+    </div>
+    <div class="chart-sub" id="info-纳指100"></div>
+    <div class="chart-wrap" id="wrap-纳指100"></div>
+  </div>
+  <div class="chart-block" data-idx="标普500">
+    <div class="chart-head">
+      <span class="chart-title">标普500</span>
+      <span class="chart-price" id="price-标普500">—</span>
+      <span class="chart-chg" id="chg-标普500">—</span>
+      <span class="legend">
+        <span><i style="background:#f59e0b"></i>MA5 <b id="ma5-标普500">—</b></span>
+        <span><i style="background:#7c3aed"></i>MA20 <b id="ma20-标普500">—</b></span>
+        <span><i style="background:#db2777"></i>MA50 <b id="ma50-标普500">—</b></span>
+        <span><i style="background:#0d9488"></i>MA200 <b id="ma200-标普500">—</b></span>
+      </span>
+      <span class="range" id="range-标普500"></span>
+    </div>
+    <div class="chart-sub" id="info-标普500"></div>
+    <div class="chart-wrap" id="wrap-标普500"></div>
+  </div>
+
+  <footer>
+    数据来源：天天基金，每日自动更新 · 仅场外 A 类份额 · <a href="kline.html">指数日K线</a> · <a href="dca.html">定投模拟</a>
+  </footer>
+</div>
+
+<script src="kline_echarts.js"></script>
+<script src="data.js"></script>
+<script src="kline_data.js"></script>
+<script src="pe_data.js"></script>
+<script>
+/* echarts 组件库本地缓存：页面加载过一次后存入 localStorage，之后访客秒开。
+   升级 echarts.min.js 时请同步把 KEY 里的版本号改一下，旧缓存自动失效。 */
+(function () {
+  var KEY = 'echarts.cache.5.5.1';
+  try {
+    var code = localStorage.getItem(KEY);
+    if (code && code.indexOf('</' + 'script') === -1) {
+      document.write('<scr' + 'ipt>' + code + '<\/scr' + 'ipt>');
+      return;
+    }
+  } catch (e) { /* 隐私模式等不支持 localStorage，走正常加载 */ }
+  document.write('<scr' + 'ipt src="echarts.min.js"><\/scr' + 'ipt>');
+  window.addEventListener('load', function () {
+    if (!window.echarts || !window.fetch) return;
+    fetch('echarts.min.js').then(function (r) { return r.text(); }).then(function (t) {
+      if (t && t.indexOf('</' + 'script') === -1) {
+        try { localStorage.setItem(KEY, t); } catch (e) { /* 超出配额则放弃缓存 */ }
+      }
+    }).catch(function () {});
+  });
+})();
+</script>
+<script>
+let DATA = [];
+let idxFilter = '纳指100';      // all / 纳指100 / 标普500 / 纳指科技；默认只看纳斯达克100
+let innerSortKey = 'ret_1y';    // 默认按近1年收益率排序
+let innerSortAsc = false;       // 默认从高到低
+let otcFirst = false;           // 可申购优先：点「申购状态」列头开关；开启后可申购在前，组内仍按当前排序列
+
+const fmt = (v, d = '-') => (v === null || v === undefined || v === '') ? d : v;
+const fmtNav = (v) => (v === null || v === undefined) ? '—' : v.toFixed(4);
+
+function idxLabel(i) {
+  if (i === '标普500') return '<span class="tag idx500">标普500</span>';
+  if (i === '纳指科技') return '<span class="tag idxtech">纳指科技</span>';
+  return '<span class="tag idx100">纳指100</span>';
+}
+function otcQuota(f) {
+  const s = f.otc_status || '', lim = f.otc_limit || '';
+  // 暂停申购：不能买，不显示残留的旧额度（避免误导）
+  if (s.includes('暂停')) return '<span class="status-pause">暂停申购</span>';
+  // 其余状态（限大额/开放/限额等）统一视为「可申购」，显示限购金额
+  if (lim) return `<span class="limit">${lim}</span>`;
+  return '<span class="muted">—</span>';
+}
+function trackingError(v) {
+  if (v === null || v === undefined) return '<span class="muted">—</span>';
+  return `<span>${v.toFixed(2)}%</span>`;
+}
+function ret1yHtml(v, idx) {
+  if (v === null || v === undefined) return '<span class="muted">—</span>';
+  // 满格基准：按指数分类取各自的最大绝对值（纳指科技不参与）
+  const pool = idx === '纳指科技' ? [] : DATA.filter(f => f.index === idx);
+  const vals = pool.map(f => f.ret_1y).filter(x => x !== null && x !== undefined);
+  const maxAbs = vals.length ? Math.max(...vals.map(x => Math.abs(x)), 1) : 1;
+  const pct = Math.min(Math.abs(v) / maxAbs * 100, 100).toFixed(1);
+  const neg = v < 0;
+  const txt = `${v > 0 ? '+' : ''}${v.toFixed(2)}%`;
+  return `<div class="ret-bar-wrap"><div class="ret-bar-fill${neg ? ' neg' : ''}" style="width:${pct}%"></div><div class="ret-bar-text">${txt}</div></div>`;
+}
+function feeCell(f) {
+  const mgmt = f.fee_mgmt, cust = f.fee_custodian, buy = f.fee_buy, sales = f.fee_sales;
+  let annual = '—';
+  if (mgmt !== null && mgmt !== undefined && cust !== null && cust !== undefined) {
+    annual = (mgmt + cust).toFixed(2) + '%';
+  }
+  let sub = '';
+  if (buy !== null && buy !== undefined && buy > 0) sub = `申购${buy}%`;
+  else if (sales !== null && sales !== undefined && sales > 0) sub = `销售${sales}%`;
+  return `<span>${annual}</span>${sub ? `<div class="muted" style="font-size:11px">${sub}</div>` : ''}`;
+}
+
+function matchFilter(f) {
+  if (idxFilter !== 'all' && f.index !== idxFilter) return false;
+  return true;
+}
+
+const idxOrder = { '纳指100': 0, '标普500': 1, '纳指科技': 2 };
+const idxTitle = { '纳指100': '纳斯达克100', '标普500': '标普500', '纳指科技': '纳指科技' };
+
+// 解析限购金额为数值（"10元"→10，"100元"→100，"1万元"→10000），无法解析返回 -1
+function limitToNum(s) {
+  if (!s) return -1;
+  const m = String(s).match(/(\d+(?:\.\d+)?)\s*(万|元)?/);
+  if (!m) return -1;
+  let n = parseFloat(m[1]);
+  if (m[2] === '万') n *= 10000;
+  return n;
+}
+
+function innerCompare(a, b) {
+  let va, vb;
+  if (innerSortKey === 'otc_limit') {
+    // 额度排序：转成数值比较（"10元"→10，"1万元"→10000）
+    va = limitToNum(a.otc_limit);
+    vb = limitToNum(b.otc_limit);
+  } else {
+    va = a[innerSortKey];
+    vb = b[innerSortKey];
+  }
+  if (va === null || va === undefined) va = -Infinity;
+  if (vb === null || vb === undefined) vb = -Infinity;
+  if (typeof va === 'string') return innerSortAsc ? va.localeCompare(vb, 'zh') : vb.localeCompare(va, 'zh');
+  return innerSortAsc ? va - vb : vb - va;
+}
+
+// 申购状态分组，与状态列展示口径一致：含「暂停」= 不可申购，其余（开放/限大额）= 可申购
+const isBuyable = f => !(f.otc_status || '').includes('暂停');
+function otcCompare(a, b) {
+  const ba = isBuyable(a), bb = isBuyable(b);
+  if (ba !== bb) return ba ? -1 : 1;
+  return innerCompare(a, b);
+}
+
+function rowHtml(f) {
+  const status = f.otc_status || '';
+  const statusCell = status.includes('暂停') ? '<span class="status-pause">暂停申购</span>'
+    : '<span class="status-open">可申购</span>';
+  return `
+    <tr>
+      <td class="left name">${fmt(f.name)}</td>
+      <td class="left code" data-label="代码">${f.code}</td>
+      <td class="left" data-label="指数">${idxLabel(f.index)}</td>
+      <td data-label="单位净值">${fmtNav(f.nav)}<div class="muted" style="font-size:11px">${fmt(f.nav_date, '')}</div></td>
+      <td data-label="近1年">${ret1yHtml(f.ret_1y, f.index)}</td>
+      <td data-label="申购状态">${statusCell}</td>
+      <td data-label="代销额度">${otcQuota(f)}</td>
+      <td data-label="跟踪误差">${trackingError(f.tracking_error)}</td>
+      <td data-label="费率(年)">${feeCell(f)}</td>
+    </tr>`;
+}
+
+function render() {
+  const filtered = DATA.filter(matchFilter).sort(otcFirst ? otcCompare : innerCompare);
+
+  // 「全部」时按指数分组，各组内独立排序（纳指100 在前，标普500 在后）
+  const groups = (idxFilter === 'all'
+    ? Object.keys(idxOrder).sort((a, b) => idxOrder[a] - idxOrder[b])
+    : [idxFilter]).filter(g => filtered.some(f => f.index === g));
+
+  let html = '';
+  groups.forEach(g => {
+    html += `<tr class="group-row otc"><td colspan="9">▍${idxTitle[g]} · 场外 A 类</td></tr>`;
+    html += filtered.filter(f => f.index === g).map(rowHtml).join('');
+  });
+
+  const tbody = document.querySelector('#tbl tbody');
+  tbody.innerHTML = html || '<tr><td colspan="9" style="text-align:center;padding:30px" class="muted">没有符合条件的基金</td></tr>';
+
+  document.querySelectorAll('thead th[data-sort]').forEach(th => {
+    const k = th.dataset.sort;
+    th.querySelector('.sort-ind')?.remove();
+    if (k === 'otc' && otcFirst) th.insertAdjacentHTML('beforeend', '<span class="sort-ind"> ▼</span>');
+    else if (k === innerSortKey) th.insertAdjacentHTML('beforeend', `<span class="sort-ind">${innerSortAsc ? ' ▲' : ' ▼'}</span>`);
+  });
+
+  updateQuoteVisibility();
+  updateKlineVisibility();
+  renderValuation();
+}
+
+// 筛选按钮
+document.querySelectorAll('.toolbar button[data-filter]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const kind = btn.dataset.filter, val = btn.dataset.val;
+    document.querySelectorAll(`.toolbar button[data-filter="${kind}"]`).forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    if (kind === 'idx') idxFilter = val;
+    render();
+  });
+});
+
+// 表头排序（组内）；「申购状态」列为开关：点一下可申购优先，再点恢复混排
+document.querySelectorAll('thead th[data-sort]').forEach(th => {
+  th.addEventListener('click', () => {
+    const k = th.dataset.sort;
+    if (k === 'otc') {
+      otcFirst = !otcFirst;
+    } else {
+      innerSortKey = k; innerSortAsc = false; otcFirst = false;
+    }
+    render();
+  });
+});
+
+function renderIndexQuotes(quotes) {
+  const conf = [
+    { key: '纳指100', priceId: 'price-ndx', changeId: 'change-ndx' },
+    { key: '标普500', priceId: 'price-spx', changeId: 'change-spx' },
+  ];
+  conf.forEach(({ key, priceId, changeId }) => {
+    const q = (quotes && quotes[key]) || null;
+    const priceEl = document.getElementById(priceId);
+    const changeEl = document.getElementById(changeId);
+    if (!priceEl || !changeEl) return;
+    const card = priceEl.closest('.quote-card');
+    if (!q || q.price === null || q.price === undefined) {
+      priceEl.textContent = '—';
+      priceEl.className = 'quote-price';
+      changeEl.textContent = '暂无数据';
+      changeEl.className = 'quote-change';
+      if (card) card.className = 'quote-card';
+      return;
+    }
+    const change = (q.change === null || q.change === undefined) ? 0 : q.change;
+    const pct = q.pct;
+    const cls = change > 0 ? 'up' : (change < 0 ? 'down' : 'flat');
+    priceEl.textContent = q.price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    priceEl.className = 'quote-price ' + cls;
+    let changeTxt = (change > 0 ? '+' : '') + change.toFixed(2);
+    if (pct !== null && pct !== undefined) {
+      changeTxt += '　' + (pct > 0 ? '+' : '') + pct.toFixed(2) + '%';
+    }
+    changeEl.textContent = changeTxt;
+    changeEl.className = 'quote-change ' + cls;
+    if (card) card.className = 'quote-card ' + cls;
+  });
+}
+
+// 指数卡片跟随指数筛选：选「纳斯达克100」只显示纳指卡，选「标普500」只显示标普卡
+function updateQuoteVisibility() {
+  const cards = document.querySelectorAll('.quote-card');
+  let visible = 0;
+  cards.forEach(card => {
+    const show = (idxFilter === 'all' || idxFilter === card.dataset.idx);
+    card.style.display = show ? '' : 'none';
+    if (show) visible++;
+  });
+  const container = document.querySelector('.quotes');
+  if (container) {
+    container.style.display = (visible === 0) ? 'none' : '';
+  }
+}
+
+// K线 tab：「全部」时两个指数共用一块图表区，点标签切换；选具体指数时自动定位
+let klineTab = '纳指100';
+function updateKlineVisibility() {
+  const blocks = document.querySelectorAll('.chart-block');
+  const tabs = document.getElementById('kline-tabs');
+  if (tabs) tabs.style.display = (idxFilter === 'all') ? 'inline-flex' : 'none';
+  let visible = 0;
+  blocks.forEach(b => {
+    const show = (idxFilter === 'all') ? (b.dataset.idx === klineTab) : (idxFilter === b.dataset.idx);
+    b.style.display = show ? '' : 'none';
+    if (show) visible++;
+  });
+  const title = document.getElementById('kline-title');
+  if (title) title.style.display = (visible === 0) ? 'none' : '';
+  // 图表容器从隐藏变可见后，需要重算尺寸（首显时补建实例）
+  if (window.KLINE_ECHARTS) window.KLINE_ECHARTS.resizeAll();
+}
+document.querySelectorAll('#kline-tabs button').forEach(b => {
+  b.addEventListener('click', () => {
+    klineTab = b.dataset.idx;
+    document.querySelectorAll('#kline-tabs button').forEach(x => x.classList.toggle('active', x === b));
+    updateKlineVisibility();
+  });
+});
+
+// 行情卡片迷你走势线：取近 66 个交易日收盘价画 sparkline（红涨绿跌）
+function renderSpark(elId, idxName) {
+  const el = document.getElementById(elId);
+  if (!el) return;
+  const rows = (window.KLINE_DATA || {})[idxName];
+  if (!rows || rows.length < 5) { el.innerHTML = ''; return; }
+  const close = rows.slice(-66).map(r => r[2]);
+  const min = Math.min(...close), max = Math.max(...close), span = (max - min) || 1;
+  const W = 120, H = 40, P = 3;
+  const pts = close.map((v, i) => [
+    P + i * (W - 2 * P) / (close.length - 1),
+    H - P - (v - min) * (H - 2 * P) / span,
+  ]);
+  const d = pts.map((p, i) => (i ? 'L' : 'M') + p[0].toFixed(2) + ',' + p[1].toFixed(2)).join('');
+  const up = close[close.length - 1] >= close[0];
+  const color = up ? '#dc2626' : '#16a34a';
+  el.innerHTML =
+    `<path d="${d} L${(W - P).toFixed(2)},${H} L${P},${H} Z" fill="${color}" opacity=".12"/>` +
+    `<path d="${d}" fill="none" stroke="${color}" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/>` +
+    `<circle cx="${pts[pts.length - 1][0].toFixed(2)}" cy="${pts[pts.length - 1][1].toFixed(2)}" r="2.4" fill="${color}"/>`;
+}
+
+// 指数估值风险条：根据 pe_data.js 的 PE 近10年分位画五档横条 + 当前位置指针
+function renderValuation() {
+  const card = document.getElementById('valuation-card');
+  const wrap = document.getElementById('valuation-rows');
+  const src = document.getElementById('val-src');
+  if (!card || !wrap) return;
+  const data = window.PE_DATA || {};
+  // 跟随顶部「指数」筛选联动：选纳指只看纳指，选标普只看标普；纳指科技无 PE 数据则整卡隐藏
+  const items = ['纳指100', '标普500']
+    .map(k => ({ k, v: data[k] }))
+    .filter(x => x.v && typeof x.v.pe === 'number')
+    .filter(x => idxFilter === 'all' || x.k === idxFilter);
+  if (!items.length) { card.style.display = 'none'; return; }
+  wrap.innerHTML = items.map(({ k, v }) => {
+    const pct = (v.pct == null) ? null : Math.max(0, Math.min(100, v.pct));
+    const lvl = pct == null ? ['积累中', 'lvl-2']
+      : pct < 20 ? ['极度低估', 'lvl-0']
+      : pct < 40 ? ['低估', 'lvl-1']
+      : pct < 60 ? ['合理', 'lvl-2']
+      : pct < 80 ? ['高估', 'lvl-3'] : ['极度高估', 'lvl-4'];
+    const dot = k === '纳指100' ? 'ndx' : 'spx';
+    return `
+    <div class="val-row">
+      <span class="val-name"><span class="quote-dot ${dot}"></span>${idxTitle[k] || k}</span>
+      <div class="val-meter">
+        <div class="meter">${pct == null ? '' :
+          `<div class="meter-pt" style="left:${pct.toFixed(1)}%"></div>`}</div>
+        <div class="meter-scale"><span>极度低估</span><span>低估</span><span>合理</span><span>高估</span><span>极度高估</span></div>
+      </div>
+      <div class="val-nums">
+        <span class="val-pe">PE<b>${v.pe.toFixed(2)}</b></span>
+        <span class="val-pct ${lvl[1]}">${pct == null ? '历史分位待积累' : `${lvl[0]} · 近10年 ${pct.toFixed(1)}% 分位`}</span>
+      </div>
+    </div>`;
+  }).join('');
+  const dates = [...new Set(items.map(x => x.v.updated).filter(Boolean))];
+  if (src) {
+    src.textContent = 'PE = 指数成分股整体市盈率（TTM，市值加权）；分位 = 当前 PE 在自身近 10 年历史中的位置。'
+      + '不同指数盈利结构不同，PE 绝对值横向比意义不大，看分位更准。数据：蛋卷基金' + (dates[0] ? '，更新于 ' + dates[0] : '');
+  }
+  card.style.display = 'block';
+}
+
+function applyData(d) {
+  DATA = d.funds || [];
+  document.getElementById('updated').textContent = '更新于 ' + (d.updated || '—');
+  renderIndexQuotes(d.index_quotes);
+  renderSpark('spark-ndx', '纳指100');
+  renderSpark('spark-spx', '标普500');
+  render();
+}if (window.FUND_DATA) {
+  applyData(window.FUND_DATA);
+} else {
+  fetch('data.json').then(r => r.json()).then(applyData).catch(e => {
+    document.querySelector('#tbl tbody').innerHTML =
+      '<tr><td colspan="9" style="text-align:center;padding:30px" class="muted">加载数据失败：请先运行 scrape.py 生成数据，或双击「启动.bat」</td></tr>';
+  });
+}
+renderValuation();
+
+// 纳指100 拼接口径说明（接缝信息由 kline_data.js 的 KLINE_SPLICE_META 提供）
+(function () {
+  const m = window.KLINE_SPLICE_META;
+  const el = document.getElementById('kline-note');
+  if (el && m && m.prefix) {
+    el.textContent = '纳斯达克100：' + m.prefix.end + ' 前为 QQQ 复权价折算拼接，仅作趋势参考';
+  }
+})();
+
+// 初始化K线图（ECharts 渲染模块，与 kline.html 共用）
+document.querySelectorAll('.chart-block').forEach(block => {
+  const idx = block.dataset.idx;
+  window.KLINE_ECHARTS.init({
+    idx: idx,
+    elId: 'wrap-' + idx,
+    priceId: 'price-' + idx,
+    chgId: 'chg-' + idx,
+    infoId: 'info-' + idx,
+    maIds: { ma5: 'ma5-' + idx, ma20: 'ma20-' + idx, ma50: 'ma50-' + idx, ma200: 'ma200-' + idx },
+    rangeBoxId: 'range-' + idx,
+  });
+});
+</script>
+</body>
+</html>
