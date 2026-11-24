@@ -235,10 +235,11 @@ def fetch_fees(code):
 
 
 # ---------------------------------------------------------------- 指数实时点位
-# 数据源：腾讯行情 qt.gtimg.cn（us.NDX=纳斯达克100，us.INX=标普500，与场内 ETF 同一接口）。
+# 数据源：腾讯行情 qt.gtimg.cn（us.NDX=纳斯达克100，us.INX=标普500，sh000001=上证指数，
 INDEX_QUOTES = {
     "纳指100": "us.NDX",
     "标普500": "us.INX",
+    "上证指数": "sh000001",
 }
 
 
@@ -284,6 +285,78 @@ def fetch_index_quotes():
     return result
 
 
+# ---------------------------------------------------------------- 指数当日分时（卡片迷你走势线）
+# 统一走 Worker 的 /trends 路由（worker 端代取东财 trends2）：本机不直连东财，
+# 且 A股/美股 同一接口同一格式（腾讯对美股指数无分钟线，新浪无分时服务）。
+# 纳指100 用东财 105.QQQ（Invesco 纳指100 旗舰 ETF）的日内走势：真实纳指100 指数
+# 的分钟级免费源不存在（新浪无美股分时、腾讯美股只回单点、东财 100.NDX100 死）。
+# 昨收字段（pre）必须与曲线同量纲：
+#   纳指100 -> QQQ 自己的昨日收盘（新浪美股日K中「日期早于分时首日」的最后一根收盘；
+#              实测与东财分时收盘 651.03 双源互证），绝不能用指数口径的 26700，否则
+#              页面 y 轴被撑爆、曲线会画成一条直线；
+#   标普500/上证 -> 实时指数快照 price - change（与分时同一次快照，同源同量纲）。
+def _qqq_prev_close(minute_date):
+    """取 QQQ 的昨日收盘（纳指100 分时线的着色/虚线基准）。"""
+    try:
+        import kline_data
+        rows = json.loads(fetch(f"{kline_data.WORKER}?vendor=sinaus&symbol=qqq&n=8", raw=True))
+        best = None
+        for row in rows:
+            if isinstance(row, dict) and row.get("d", "") < minute_date and row.get("c"):
+                best = float(row["c"])
+        return best
+    except Exception as e:  # noqa
+        print(f"  [警告] QQQ 昨收获取失败: {e}")
+        return None
+
+
+def fetch_index_minutes(index_quotes=None):
+    """抓取三个指数的当日分时，供卡片迷你走势线（离线/file:// 时的静态底图）。
+
+    返回 {指数名: {"pre": 昨收（与曲线同量纲）, "pts": [当日分钟价格, …]}}，
+    获取失败的指数不进结果。东财 trends2 经 CF 间歇性 520，按次数重试择先成功。
+    """
+    import kline_data
+    secids = {"纳指100": "105.QQQ", "标普500": "100.SPX", "上证指数": "1.000001"}
+    index_quotes = index_quotes or {}
+    result = {}
+    for name, secid in secids.items():
+        got, last_err = None, None
+        for _ in range(6):  # 上游闪断 520 重试，2 秒间隔（QQQ 通道成功率最低，放宽重试）
+            try:
+                data = json.loads(fetch(f"{kline_data.WORKER_HOST}/trends?secid={secid}", raw=True))
+                d = data.get("data") or {}
+                rows = d.get("trends") or []
+                pts = []
+                for row in rows:
+                    try:
+                        pts.append(float(row.split(",")[1]))
+                    except (IndexError, ValueError):
+                        continue
+                if len(pts) >= 5:
+                    got = (pts, rows[0].split(",")[0][:10])  # 首行时间戳的日期部分
+                    break
+            except Exception as e:  # noqa
+                last_err = e
+            time.sleep(2.0)
+        if got:
+            pts, minute_date = got
+            if name == "纳指100":
+                pre = _qqq_prev_close(minute_date)
+            else:
+                q = index_quotes.get(name) or {}
+                if q.get("price") is not None and q.get("change") is not None:
+                    pre = q["price"] - q["change"]
+                else:
+                    pre = None
+            result[name] = {"pre": pre, "pts": pts}
+            print(f"  {name} 分时: {len(pts)} 个分钟点，昨收 {pre}")
+        else:
+            print(f"  [警告] {name} 分时获取失败: {last_err}")
+        time.sleep(0.3)
+    return result
+
+
 # ---------------------------------------------------------------- 指数日K（kline_data.js）
 # 抓取逻辑（含纳指100 的 QQQ 历史拼接，见 kline_data.py 模块文档）统一放在 kline_data.py，
 # 这里只负责调用，避免两处数据生成入口口径不一致。
@@ -296,18 +369,6 @@ def write_kline_data():
         kline_data.main()
     except Exception as e:  # noqa
         print(f"  [警告] 指数日K更新失败（保留旧的 kline_data.js）: {e}")
-
-
-# ---------------------------------------------------------------- 指数估值（pe_data.js）
-# PE / 历史分位的抓取逻辑统一放在 pe_data.py，这里只负责调用。
-
-def write_pe_data():
-    """更新指数估值文件 pe_data.js（供主页估值风险条加载）。"""
-    try:
-        import pe_data
-        pe_data.main()
-    except Exception as e:  # noqa
-        print(f"  [警告] 指数估值更新失败（保留旧的 pe_data.js）: {e}")
 
 
 # ---------------------------------------------------------------- 主流程
@@ -407,6 +468,16 @@ def main():
             pass
     print(f"  指数点位: {', '.join(k + ' ' + str(v.get('price')) for k, v in index_quotes.items())}")
 
+    # 指数当日分时（卡片迷你走势线底图）
+    index_minutes = fetch_index_minutes(index_quotes)
+    # 兜底：分时全部获取失败时沿用上一次的底图，避免迷你线空白
+    if not index_minutes and os.path.exists(OUT_FILE):
+        try:
+            old = json.load(open(OUT_FILE, encoding="utf-8"))
+            index_minutes = old.get("index_minutes") or {}
+        except Exception:
+            pass
+
     updated = (datetime.datetime.utcnow() + datetime.timedelta(hours=8)).strftime("%Y-%m-%d %H:%M:%S")
     out = {
         # 显示统一用北京时间：Actions 的机器时区是 UTC，不 +8 会显示成"昨天"，易被误判为没更新
@@ -414,6 +485,7 @@ def main():
         "note": "QDII 净值为滞后净值（T+1/T+2）。代销额度=天天基金渠道（单日限购金额）。",
         "funds": funds,
         "index_quotes": index_quotes,
+        "index_minutes": index_minutes,
     }
     payload = json.dumps(out, ensure_ascii=False, indent=2)
     with open(OUT_FILE, "w", encoding="utf-8") as f:
@@ -425,9 +497,6 @@ def main():
 
     # 指数日K（供 K线图加载）
     write_kline_data()
-
-    # 指数估值（供主页估值风险条加载）
-    write_pe_data()
 
     # 简要汇总
     ok = sum(1 for x in funds if x["nav"])

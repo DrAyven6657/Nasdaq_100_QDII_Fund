@@ -4,14 +4,14 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="theme-color" content="#f5f6f8">
-<title>纳指100 / 标普500 QDII 基金 · 场外额度监控</title>
+<title>行情监控 · 场外额度监控</title>
 <style>
   :root {
     color-scheme: light;
     --bg: #f5f6f8; --card: #ffffff; --card-2: #f3f5f8;
     --border: #e5e7eb; --border-soft: #f1f2f4; --text: #1f2937;
     --muted: #6b7280; --up: #dc2626; --down: #16a34a;
-    --idx100: #2563eb; --idx500: #ea580c; --idxtech: #7c3aed;
+    --idx100: #2563eb; --idx500: #ea580c; --idxtech: #7c3aed; --idxsse: #0d9488;
     --accent: #1d4ed8; --accent-soft: #3b82f6;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -79,49 +79,24 @@
   .sort-ind { color: var(--accent-soft); font-size: 11px; }
   footer { text-align: center; color: var(--muted); font-size: 12px; margin-top: 20px; }
   /* 指数行情卡片 */
-  .quotes { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 14px 0; }
+  .quotes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 14px 0; }
   .quote-card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 14px 18px;
     display: flex; align-items: center; justify-content: space-between; gap: 16px; }
   .quote-main { min-width: 0; }
   .spark { width: 128px; height: 44px; flex: none; }
-  .quote-card.up { background: #fdeeee; border-color: #f5c9c9; }
-  .quote-card.down { background: #e9f8ee; border-color: #c1e4ce; }
+  .quote-chart { flex: none; display: flex; flex-direction: column; }
+  .spark-axis { display: flex; justify-content: space-between; font-size: 9px; color: var(--muted);
+    line-height: 1; margin-top: 3px; font-variant-numeric: tabular-nums; white-space: nowrap; }
   .quote-name { font-size: 13px; color: var(--muted); font-weight: 600; margin-bottom: 4px; display: flex; align-items: center; gap: 7px; }
   .quote-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; flex: none; }
   .quote-dot.ndx { background: var(--idx100); }
   .quote-dot.spx { background: var(--idx500); }
-  .quote-price { font-size: 30px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.15; }
+  .quote-dot.sse { background: var(--idxsse); }
+  .quote-price { font-size: 30px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.15; color: #111827; }
   .quote-change { font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; margin-top: 3px; }
-  .quote-price.up, .quote-change.up { color: var(--up); }
-  .quote-price.down, .quote-change.down { color: var(--down); }
-  .quote-price.flat, .quote-change.flat { color: var(--muted); }
-  /* 指数估值 · 风险位置（五档横条 + 分位指针） */
-  .valuation-card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 14px 18px; margin: 14px 0 16px; }
-  .val-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px 12px; margin-bottom: 12px; }
-  .val-title { font-size: 15px; font-weight: 700; }
-  .val-note { font-size: 11.5px; color: var(--muted); }
-  .val-row { display: grid; grid-template-columns: 96px 1fr 220px; gap: 14px; align-items: center; padding: 8px 0; }
-  .val-row + .val-row { border-top: 1px dashed var(--border-soft); }
-  .val-name { font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 7px; }
-  .val-meter { min-width: 0; }
-  .meter { position: relative; height: 12px; border-radius: 6px; }
-  .meter::before { content: ""; position: absolute; inset: 0; border-radius: 6px;
-    background: linear-gradient(90deg, #16a34a 0 20%, #86efac 0 40%, #fde047 0 60%, #fb923c 0 80%, #dc2626 0 100%); }
-  .meter-pt { position: absolute; top: 50%; width: 13px; height: 13px; border-radius: 50%;
-    background: var(--text); border: 2.5px solid #fff; box-shadow: 0 0 0 1px rgba(0,0,0,.18), 0 1px 3px rgba(0,0,0,.2);
-    transform: translate(-50%, -50%); }
-  .meter-scale { display: flex; margin-top: 4px; }
-  .meter-scale span { width: 20%; text-align: center; font-size: 10.5px; color: var(--muted); }
-  .val-nums { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; font-variant-numeric: tabular-nums; }
-  .val-pe { font-size: 12.5px; color: var(--muted); }
-  .val-pe b { color: var(--text); font-size: 16px; font-weight: 700; margin-left: 3px; }
-  .val-pct { font-size: 11.5px; font-weight: 700; }
-  .lvl-0 { color: #15803d; } .lvl-1 { color: #16a34a; } .lvl-2 { color: #ca8a04; } .lvl-3 { color: #ea580c; } .lvl-4 { color: #dc2626; }
-  .val-src { margin-top: 10px; font-size: 11.5px; color: var(--muted); }
-  @media (max-width: 720px) {
-    .val-row { grid-template-columns: 78px 1fr; }
-    .val-nums { grid-column: 1 / -1; flex-direction: row; align-items: baseline; justify-content: space-between; }
-  }
+  .quote-change.up { color: var(--up); }
+  .quote-change.down { color: var(--down); }
+  .quote-change.flat { color: var(--muted); }
   /* 指数日K线 */
   .kline-title { font-size: 15px; font-weight: 700; margin: 18px 0 10px; }
   .kline-note { font-size: 12px; font-weight: 400; color: var(--muted); margin-left: 8px; }
@@ -175,27 +150,13 @@
 <body>
 <div class="container">
   <header>
-    <h1>纳指100 / 标普500 QDII 基金 · 场外额度监控</h1>
-    <div class="sub">场外指数基金（A 类）申购状态与限购额度</div>
+    <h1>行情监控 · 场外额度监控</h1>
+    <div class="sub">QDII 指数实时行情（分时 / 实时点位）· 场外指数基金（A 类）申购状态与限购额度</div>
   </header>
 
   <div class="note">
     <b>代销额度</b>=天天基金等第三方渠道（单日限购金额）。QDII 净值为滞后净值（T+1/T+2）。<br>
     暂停申购的基金不显示限购金额（无法买入）。
-  </div>
-
-  <div class="toolbar">
-    <span class="grp">
-      <span class="lbl">指数</span>
-      <button data-filter="idx" data-val="all">全部</button>
-      <button data-filter="idx" data-val="纳指100" class="active">纳斯达克100</button>
-      <button data-filter="idx" data-val="标普500">标普500</button>
-      <button data-filter="idx" data-val="纳指科技">纳指科技</button>
-    </span>
-    <span class="grp">
-      <a class="dca-btn" href="dca.html">📈 定投模拟</a>
-    </span>
-    <span class="meta" id="updated"></span>
   </div>
 
   <div class="quotes">
@@ -205,7 +166,10 @@
         <div class="quote-price" id="price-ndx">—</div>
         <div class="quote-change" id="change-ndx">—</div>
       </div>
-      <svg class="spark" id="spark-ndx" viewBox="0 0 120 40" preserveAspectRatio="none" aria-hidden="true"></svg>
+      <div class="quote-chart">
+        <svg class="spark" id="spark-ndx" viewBox="0 0 120 40" preserveAspectRatio="none" aria-hidden="true"></svg>
+        <div class="spark-axis" data-mkt="us"><span>09:30</span><span>12:45</span><span>16:00</span></div>
+      </div>
     </div>
     <div class="quote-card" data-idx="标普500">
       <div class="quote-main">
@@ -213,17 +177,36 @@
         <div class="quote-price" id="price-spx">—</div>
         <div class="quote-change" id="change-spx">—</div>
       </div>
-      <svg class="spark" id="spark-spx" viewBox="0 0 120 40" preserveAspectRatio="none" aria-hidden="true"></svg>
+      <div class="quote-chart">
+        <svg class="spark" id="spark-spx" viewBox="0 0 120 40" preserveAspectRatio="none" aria-hidden="true"></svg>
+        <div class="spark-axis" data-mkt="us"><span>09:30</span><span>12:45</span><span>16:00</span></div>
+      </div>
+    </div>
+    <div class="quote-card" data-idx="上证指数">
+      <div class="quote-main">
+        <div class="quote-name"><span class="quote-dot sse"></span>上证指数</div>
+        <div class="quote-price" id="price-sh">—</div>
+        <div class="quote-change" id="change-sh">—</div>
+      </div>
+      <div class="quote-chart">
+        <svg class="spark" id="spark-sh" viewBox="0 0 120 40" preserveAspectRatio="none" aria-hidden="true"></svg>
+        <div class="spark-axis" data-mkt="cn"><span>09:30</span><span>11:30/13:00</span><span>15:00</span></div>
+      </div>
     </div>
   </div>
 
-  <div class="valuation-card" id="valuation-card" style="display:none">
-    <div class="val-head">
-      <span class="val-title">指数估值 · 风险位置</span>
-      <span class="val-note">横条按「近10年 PE 分位」分五档：越靠右 = 当前越贵，回撤风险越大</span>
-    </div>
-    <div id="valuation-rows"></div>
-    <div class="val-src" id="val-src"></div>
+  <div class="toolbar">
+    <span class="grp">
+      <span class="lbl">指数</span>
+      <button data-filter="idx" data-val="all" class="active">全部</button>
+      <button data-filter="idx" data-val="纳指100">纳斯达克100</button>
+      <button data-filter="idx" data-val="标普500">标普500</button>
+      <button data-filter="idx" data-val="纳指科技">纳指科技</button>
+    </span>
+    <span class="grp">
+      <a class="dca-btn" href="dca.html">📈 定投模拟</a>
+    </span>
+    <span class="meta" id="updated"></span>
   </div>
 
   <div class="table-wrap">
@@ -291,7 +274,6 @@
 <script src="kline_echarts.js"></script>
 <script src="data.js"></script>
 <script src="kline_data.js"></script>
-<script src="pe_data.js"></script>
 <script>
 /* echarts 组件库本地缓存：页面加载过一次后存入 localStorage，之后访客秒开。
    升级 echarts.min.js 时请同步把 KEY 里的版本号改一下，旧缓存自动失效。 */
@@ -317,7 +299,7 @@
 </script>
 <script>
 let DATA = [];
-let idxFilter = '纳指100';      // all / 纳指100 / 标普500 / 纳指科技；默认只看纳斯达克100
+let idxFilter = 'all';          // all / 纳指100 / 标普500 / 纳指科技；默认显示全部
 let innerSortKey = 'ret_1y';    // 默认按近1年收益率排序
 let innerSortAsc = false;       // 默认从高到低
 let otcFirst = false;           // 可申购优先：点「申购状态」列头开关；开启后可申购在前，组内仍按当前排序列
@@ -451,7 +433,6 @@ function render() {
 
   updateQuoteVisibility();
   updateKlineVisibility();
-  renderValuation();
 }
 
 // 筛选按钮
@@ -482,6 +463,7 @@ function renderIndexQuotes(quotes) {
   const conf = [
     { key: '纳指100', priceId: 'price-ndx', changeId: 'change-ndx' },
     { key: '标普500', priceId: 'price-spx', changeId: 'change-spx' },
+    { key: '上证指数', priceId: 'price-sh', changeId: 'change-sh' },
   ];
   conf.forEach(({ key, priceId, changeId }) => {
     const q = (quotes && quotes[key]) || null;
@@ -501,30 +483,21 @@ function renderIndexQuotes(quotes) {
     const pct = q.pct;
     const cls = change > 0 ? 'up' : (change < 0 ? 'down' : 'flat');
     priceEl.textContent = q.price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    priceEl.className = 'quote-price ' + cls;
+    priceEl.className = 'quote-price';        // 点数固定黑色
     let changeTxt = (change > 0 ? '+' : '') + change.toFixed(2);
     if (pct !== null && pct !== undefined) {
       changeTxt += '　' + (pct > 0 ? '+' : '') + pct.toFixed(2) + '%';
     }
     changeEl.textContent = changeTxt;
     changeEl.className = 'quote-change ' + cls;
-    if (card) card.className = 'quote-card ' + cls;
   });
 }
 
-// 指数卡片跟随指数筛选：选「纳斯达克100」只显示纳指卡，选「标普500」只显示标普卡
+// 行情卡片常驻显示：指数筛选按钮只过滤基金表格，不看卡片
 function updateQuoteVisibility() {
-  const cards = document.querySelectorAll('.quote-card');
-  let visible = 0;
-  cards.forEach(card => {
-    const show = (idxFilter === 'all' || idxFilter === card.dataset.idx);
-    card.style.display = show ? '' : 'none';
-    if (show) visible++;
-  });
+  document.querySelectorAll('.quote-card').forEach(card => { card.style.display = ''; });
   const container = document.querySelector('.quotes');
-  if (container) {
-    container.style.display = (visible === 0) ? 'none' : '';
-  }
+  if (container) container.style.display = '';
 }
 
 // K线 tab：「全部」时两个指数共用一块图表区，点标签切换；选具体指数时自动定位
@@ -552,79 +525,87 @@ document.querySelectorAll('#kline-tabs button').forEach(b => {
   });
 });
 
-// 行情卡片迷你走势线：取近 66 个交易日收盘价画 sparkline（红涨绿跌）
-function renderSpark(elId, idxName) {
+// 行情卡片分时走势线（同花顺样式）：横轴固定全天交易时段——盘中画到当前分钟、右侧留白，
+// 每分钟向右长一格，永远不整体重缩放（美股 09:30~16:00 纽约 391 个分钟槽，A股
+// 09:30~11:30/13:00~15:00 共 241 个，东财序列不输出午休空档、槽位天然压缩）。
+// 线色与渐变面积按「现价 vs 昨收」红涨绿跌（同花顺口径：数字跟昨收）；灰色虚线 =
+// 昨日收盘价（ref 参数，与曲线同量纲）。纵轴范围 = 曲线波幅 ∪ 昨收（同花顺同款），
+// 虚线永远显示在真实相对位置；大跳空日曲线会相应变扁，这是行情的真实形状。
+function drawSpark(elId, points, ref, us) {
   const el = document.getElementById(elId);
-  if (!el) return;
-  const rows = (window.KLINE_DATA || {})[idxName];
-  if (!rows || rows.length < 5) { el.innerHTML = ''; return; }
-  const close = rows.slice(-66).map(r => r[2]);
-  const min = Math.min(...close), max = Math.max(...close), span = (max - min) || 1;
+  if (!el || !points || points.length < 2) { if (el) el.innerHTML = ''; return; }
+  const N = us ? 390 : 240;                 // 全天槽位（分钟数 = 全天点数 - 1）
   const W = 120, H = 40, P = 3;
-  const pts = close.map((v, i) => [
-    P + i * (W - 2 * P) / (close.length - 1),
-    H - P - (v - min) * (H - 2 * P) / span,
-  ]);
-  const d = pts.map((p, i) => (i ? 'L' : 'M') + p[0].toFixed(2) + ',' + p[1].toFixed(2)).join('');
-  const up = close[close.length - 1] >= close[0];
+  const refv = (ref === null || ref === undefined || !isFinite(ref)) ? null : ref;
+  let lo = Math.min(...points), hi = Math.max(...points);
+  if (refv !== null) { lo = Math.min(lo, refv); hi = Math.max(hi, refv); }
+  const span = (hi - lo) || (Math.abs(hi) * 0.002) || 1;
+  const px = i => P + (Math.min(i, N) / N) * (W - 2 * P);
+  const py = v => H - P - (v - lo) * (H - 2 * P) / span;
+  const d = points.map((v, i) => (i ? 'L' : 'M') + px(i).toFixed(2) + ',' + py(v).toFixed(2)).join('');
+  const last = points[points.length - 1];
+  const up = last >= (refv !== null ? refv : points[0]);
   const color = up ? '#dc2626' : '#16a34a';
-  el.innerHTML =
-    `<path d="${d} L${(W - P).toFixed(2)},${H} L${P},${H} Z" fill="${color}" opacity=".12"/>` +
-    `<path d="${d}" fill="none" stroke="${color}" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/>` +
-    `<circle cx="${pts[pts.length - 1][0].toFixed(2)}" cy="${pts[pts.length - 1][1].toFixed(2)}" r="2.4" fill="${color}"/>`;
+  const gid = 'sg-' + elId;
+  let html = `<defs><linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1">` +
+    `<stop offset="0" stop-color="${color}" stop-opacity=".26"/>` +
+    `<stop offset="1" stop-color="${color}" stop-opacity=".03"/></linearGradient></defs>` +
+    `<path d="${d} L${px(points.length - 1).toFixed(2)},${H - P} L${P},${H - P} Z" fill="url(#${gid})"/>`;
+  if (refv !== null) {
+    html += `<path d="M${P},${py(refv).toFixed(2)} L${W - P},${py(refv).toFixed(2)}"` +
+      ` stroke="#9aa4b2" stroke-width=".8" stroke-dasharray="3,2.4" fill="none" vector-effect="non-scaling-stroke"/>`;
+  }
+  html += `<path d="${d}" fill="none" stroke="${color}" stroke-width="1.7" stroke-linejoin="round" ` +
+    `stroke-linecap="round" vector-effect="non-scaling-stroke"/>` +
+    `<circle cx="${px(points.length - 1).toFixed(2)}" cy="${py(last).toFixed(2)}" r="2.2" fill="${color}"/>`;
+  el.innerHTML = html;
 }
 
-// 指数估值风险条：根据 pe_data.js 的 PE 近10年分位画五档横条 + 当前位置指针
-function renderValuation() {
-  const card = document.getElementById('valuation-card');
-  const wrap = document.getElementById('valuation-rows');
-  const src = document.getElementById('val-src');
-  if (!card || !wrap) return;
-  const data = window.PE_DATA || {};
-  // 跟随顶部「指数」筛选联动：选纳指只看纳指，选标普只看标普；纳指科技无 PE 数据则整卡隐藏
-  const items = ['纳指100', '标普500']
-    .map(k => ({ k, v: data[k] }))
-    .filter(x => x.v && typeof x.v.pe === 'number')
-    .filter(x => idxFilter === 'all' || x.k === idxFilter);
-  if (!items.length) { card.style.display = 'none'; return; }
-  wrap.innerHTML = items.map(({ k, v }) => {
-    const pct = (v.pct == null) ? null : Math.max(0, Math.min(100, v.pct));
-    const lvl = pct == null ? ['积累中', 'lvl-2']
-      : pct < 20 ? ['极度低估', 'lvl-0']
-      : pct < 40 ? ['低估', 'lvl-1']
-      : pct < 60 ? ['合理', 'lvl-2']
-      : pct < 80 ? ['高估', 'lvl-3'] : ['极度高估', 'lvl-4'];
-    const dot = k === '纳指100' ? 'ndx' : 'spx';
-    return `
-    <div class="val-row">
-      <span class="val-name"><span class="quote-dot ${dot}"></span>${idxTitle[k] || k}</span>
-      <div class="val-meter">
-        <div class="meter">${pct == null ? '' :
-          `<div class="meter-pt" style="left:${pct.toFixed(1)}%"></div>`}</div>
-        <div class="meter-scale"><span>极度低估</span><span>低估</span><span>合理</span><span>高估</span><span>极度高估</span></div>
-      </div>
-      <div class="val-nums">
-        <span class="val-pe">PE<b>${v.pe.toFixed(2)}</b></span>
-        <span class="val-pct ${lvl[1]}">${pct == null ? '历史分位待积累' : `${lvl[0]} · 近10年 ${pct.toFixed(1)}% 分位`}</span>
-      </div>
-    </div>`;
-  }).join('');
-  const dates = [...new Set(items.map(x => x.v.updated).filter(Boolean))];
-  if (src) {
-    src.textContent = 'PE = 指数成分股整体市盈率（TTM，市值加权）；分位 = 当前 PE 在自身近 10 年历史中的位置。'
-      + '不同指数盈利结构不同，PE 绝对值横向比意义不大，看分位更准。数据：蛋卷基金' + (dates[0] ? '，更新于 ' + dates[0] : '');
-  }
-  card.style.display = 'block';
+// 卡片时间刻度：统一北京时间显示。美股卡动态换算——美东当日的 UTC 偏移决定夏/冬令时
+//（夏令时 GMT-4：开盘 09:30 → 北京 21:30、收盘 16:00 → 04:00；冬令时 GMT-5：22:30 → 05:00），
+// 每 60 分钟重算一次（跨过 3 月/11 月的切换时刻也能自动对齐）；A股本身就是北京时间，静态不动。
+function ny2cst(hhmm, now) {
+  let usOff = -5;   // 保底按冬令时
+  try {
+    const tx = new Intl.DateTimeFormat('en-US',
+      { timeZone: 'America/New_York', timeZoneName: 'longOffset' })
+      .formatToParts(now || new Date()).find(p => p.type === 'timeZoneName').value;
+    const mt = tx && tx.match(/GMT([+-]\d+)/);
+    if (mt) usOff = parseInt(mt[1], 10);
+  } catch (e) { /* 老浏览器不支持 longOffset：用保底值 */ }
+  const c = hhmm.split(':');
+  const tot = ((+c[0] * 60) + (+c[1]) + (8 - usOff) * 60) % 1440;
+  return ('0' + Math.floor(tot / 60)).slice(-2) + ':' + ('0' + tot % 60).slice(-2);
 }
+function updateSparkAxis(now) {
+  document.querySelectorAll('.spark-axis[data-mkt="us"]').forEach(el => {
+    el.children[0].textContent = ny2cst('09:30', now);
+    el.children[1].textContent = ny2cst('12:45', now);
+    el.children[2].textContent = ny2cst('16:00', now);
+  });
+}
+updateSparkAxis();
+setInterval(() => updateSparkAxis(), 3600000);
 
 function applyData(d) {
   DATA = d.funds || [];
   document.getElementById('updated').textContent = '更新于 ' + (d.updated || '—');
   renderIndexQuotes(d.index_quotes);
-  renderSpark('spark-ndx', '纳指100');
-  renderSpark('spark-spx', '标普500');
+  // 分时底图：昨收基准一律用 scrape 预先算好的同量纲值（__SPARK_PRE：纳指100=QQQ 口径、
+  // 标普/上证=指数快照口径；昨收当日恒定，实时插件分钟刷新时直接复用，不作盘中更新）
+  const mi = d.index_minutes || {};
+  window.__SPARK_PRE = window.__SPARK_PRE || {};
+  [['spark-ndx', '纳指100', 1], ['spark-spx', '标普500', 1], ['spark-sh', '上证指数', 0]].forEach(([id, name, us]) => {
+    const m = mi[name], q = (d.index_quotes || {})[name];
+    const ref = (m && m.pre != null) ? m.pre
+      : (q && q.price != null && q.change != null ? q.price - q.change : null);
+    if (ref != null) window.__SPARK_PRE[id] = ref;
+    drawSpark(id, m && m.pts, ref, us);
+  });
   render();
-}if (window.FUND_DATA) {
+}
+
+if (window.FUND_DATA) {
   applyData(window.FUND_DATA);
 } else {
   fetch('data.json').then(r => r.json()).then(applyData).catch(e => {
@@ -632,7 +613,6 @@ function applyData(d) {
       '<tr><td colspan="9" style="text-align:center;padding:30px" class="muted">加载数据失败：请先运行 scrape.py 生成数据，或双击「启动.bat」</td></tr>';
   });
 }
-renderValuation();
 
 // 纳指100 拼接口径说明（接缝信息由 kline_data.js 的 KLINE_SPLICE_META 提供）
 (function () {
@@ -656,6 +636,134 @@ document.querySelectorAll('.chart-block').forEach(block => {
     rangeBoxId: 'range-' + idx,
   });
 });
+</script>
+
+<script>
+/* ── 实时行情插件 ──────────────────────────────────────────────
+   通道：yingman.chitong-indextracking.xyz（自有域名 → index-tracking Worker → 新浪行情）
+   覆盖：纳斯达克100 / 标普500（美股 gb_ 现货）、上证指数（A股 sh000001）
+   行为：美股或A股任一开盘时段每 5 秒刷新；都收盘时不发请求；
+        单次失败静默跳过（卡片保持原值），连挂 3 次自动歇 30 秒；
+        任何异常均不影响页面原有功能。 ───────────────────────────── */
+(function () {
+  const RT_PROXY = 'https://yingman.chitong-indextracking.xyz/';
+  const MAP = [
+    // 纳指100 分时用东财 105.QQQ（Invesco 纳指100 旗舰 ETF）：真实纳指100 指数的分钟级
+    // 免费源不存在（新浪无美股分时、腾讯美股只回单点、东财 100.NDX100 死）。QQQ 与指数
+    // 当日走势高度一致，迷你线不展示数值；红绿仍按纳指100 自己的昨收/现价计算。
+    // 东财分时经 CF 间歇性 520：页面每 60 秒轮询自动补帧，失败保留上一帧。
+    { code: 'gb_ndx',   secid: '105.QQQ',    us: 1, priceId: 'price-ndx', changeId: 'change-ndx', sparkId: 'spark-ndx' },   // 纳斯达克100
+    { code: 'gb_inx',   secid: '100.SPX',    us: 1, priceId: 'price-spx', changeId: 'change-spx', sparkId: 'spark-spx' },   // 标普500
+    { code: 'sh000001', secid: '1.000001',   us: 0, priceId: 'price-sh',  changeId: 'change-sh',  sparkId: 'spark-sh' },    // 上证指数
+  ];
+  // 新浪美股 gb_ 字段：0名称 1最新价 2涨跌幅% 3报价时间(北京) 4涨跌额 5开 6高 7低
+  // 新浪A股字段：0名称 1今开 2昨收 3最新价 … 30日期 31时间(北京)
+  // secid = 东财代码（Worker /trends 路由用，取当日分时）；us=1 表示按美股时段刷新
+
+  const style = document.createElement('style');
+  style.textContent = '.rt-badge{font-size:10px;padding:1px 6px;border-radius:4px;' +
+    'background:rgba(16,185,129,.12);color:#047857;border:1px solid rgba(16,185,129,.35);' +
+    'font-weight:600;margin-left:2px}' +
+    '.rt-badge.closed{background:rgba(100,116,139,.12);color:#64748b;' +
+    'border-color:rgba(100,116,139,.35)}';
+  document.head.appendChild(style);
+
+  // 美股是否开盘：按纽约时间判断，夏令时/冬令时自动正确（周一~五 9:30~16:00）
+  function usOpen() {
+    const d = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }));
+    const mins = d.getHours() * 60 + d.getMinutes();
+    return d.getDay() >= 1 && d.getDay() <= 5 && mins >= 570 && mins < 960;
+  }
+  // A股是否开盘：北京时间（周一~五 9:30~11:30、13:00~15:00；法定节假日不判断，
+  // 停市时新浪返回的仍是最后一笔报价，卡片只是不跳动，无副作用）
+  function cnOpen() {
+    const d = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Shanghai' }));
+    const mins = d.getHours() * 60 + d.getMinutes();
+    return d.getDay() >= 1 && d.getDay() <= 5 &&
+      ((mins >= 570 && mins < 690) || (mins >= 780 && mins < 900));
+  }
+
+  function apply(m, f) {
+    let price, pct, chg, hhmm;
+    if (m.code.indexOf('gb_') === 0) {
+      // 美股 gb_ 现货：1最新价 2涨跌幅% 3报价时间 4涨跌额
+      price = parseFloat(f[1]); pct = parseFloat(f[2]); chg = parseFloat(f[4]);
+      hhmm = (f[3] || '').slice(11, 16);
+    } else {
+      // A股指数：2昨收 3最新价 31时间（涨跌额/涨跌幅由昨收现算）
+      price = parseFloat(f[3]);
+      const prev = parseFloat(f[2]);
+      chg = price - prev;
+      pct = prev > 0 ? chg / prev * 100 : NaN;
+      hhmm = (f[31] || '').slice(0, 5);
+    }
+    if (!isFinite(price) || !isFinite(pct) || !isFinite(chg)) return;
+    const priceEl = document.getElementById(m.priceId);
+    const changeEl = document.getElementById(m.changeId);
+    if (!priceEl || !changeEl) return;
+    const cls = pct > 0 ? 'up' : (pct < 0 ? 'down' : 'flat');
+    priceEl.textContent = price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    priceEl.className = 'quote-price';        // 点数固定黑色，不随涨跌变色
+    changeEl.textContent = (chg > 0 ? '+' : '') + chg.toFixed(2) + '　' + (pct > 0 ? '+' : '') + pct.toFixed(2) + '%';
+    changeEl.className = 'quote-change ' + cls;   // 涨跌额/涨跌幅保持红涨绿跌
+    const nameEl = priceEl.parentElement.querySelector('.quote-name');
+    if (nameEl) {
+      let tag = nameEl.querySelector('.rt-badge');
+      if (!tag) { tag = document.createElement('span'); tag.className = 'rt-badge'; nameEl.appendChild(tag); }
+      // 开盘时段显示「实时」，收盘/休市（含A股午休）显示「收盘」；时间一样取最后报价时刻
+      const open = m.code.indexOf('gb_') === 0 ? usOpen() : cnOpen();
+      tag.textContent = (open ? '实时 ' : '收盘 ') + hhmm;
+      tag.className = 'rt-badge' + (open ? '' : ' closed');
+    }
+  }
+
+  let fails = 0, restUntil = 0;
+  function pull() {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 6000);   // 单次最长等 6 秒
+    fetch(RT_PROXY, { cache: 'no-store', signal: ctrl.signal })
+      .then(r => r.text())
+      .then(txt => {
+        clearTimeout(timer);
+        MAP.forEach(m => {
+          const mtch = txt.match(new RegExp('hq_str_' + m.code + '="([^"]*)"'));
+          if (mtch) apply(m, mtch[1].split(','));
+        });
+        fails = 0;
+      })
+      .catch(() => {
+        if (++fails >= 3) { restUntil = Date.now() + 30000; fails = 0; }
+      });
+  }
+
+  // 每 5 秒一拉；美股与A股都不在开盘时段时不发请求，连续失败期间暂停
+  setInterval(() => { if ((usOpen() || cnOpen()) && Date.now() >= restUntil) pull(); }, 5000);
+  pull();                    // 进页面先拉一次：休市也能把最新收盘价点亮到卡片
+  window.__rtPull = pull;    // 调试钩子：控制台输入 __rtPull() 可手动触发
+
+  // 分时迷你线：每 60 秒按各自市场开盘状态增量刷新（报价接口只有快照，分时序列走 Worker /trends）
+  function minutePull(m) {
+    const open = m.us ? usOpen() : cnOpen();
+    if (!open) return;       // 收市保持最后画面（页面刚打开时由 data.json 静态底图兜住）
+    fetch(RT_PROXY + 'trends?secid=' + m.secid, { cache: 'no-store' })
+      .then(r => r.json())
+      .then(j => {
+        const d = (j && j.data) || {};
+        const pts = [];
+        (d.trends || []).forEach(row => {
+          const v = parseFloat(row.split(',')[1]);
+          if (isFinite(v)) pts.push(v);
+        });
+        // 昨收基准读 applyData 预存的同量纲预计算值（__SPARK_PRE；当日恒定，不作盘中更新）
+        const sref = (window.__SPARK_PRE || {})[m.sparkId];
+        if (pts.length >= 2 && isFinite(sref)) drawSpark(m.sparkId, pts, sref, m.us);
+      })
+      .catch(() => {});
+  }
+  setInterval(() => { if (Date.now() >= restUntil) MAP.forEach(minutePull); }, 60000);
+  MAP.forEach(minutePull);   // 进页面立即对齐一次（收市时自动跳过，用静态底图）
+  window.__rtMinute = () => MAP.forEach(minutePull);   // 调试钩子
+})();
 </script>
 </body>
 </html>

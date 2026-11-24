@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="theme-color" content="#f5f6f8">
-<title>定投模拟 · 纳指100 / 标普500 / 上证指数</title>
+<title>定投模拟 · 纳指100 / 标普500 / 上证指数 / 红利低波50</title>
 <style>
   :root {
     color-scheme: light;
@@ -64,7 +64,7 @@
 <div class="container">
   <header>
     <h1>定投模拟</h1>
-    <div class="sub">指数定投回测（按收盘价，未含股息）· <a href="index.html">返回监控主页</a> · <a href="kline.html">指数日K线</a></div>
+    <div class="sub">定投回测（指数按收盘价、未含股息；红利低波50 按基金净值，分红方式可选）· <a href="index.html">返回监控主页</a> · <a href="kline.html">指数日K线</a></div>
   </header>
 
   <div class="msg" id="msg"></div>
@@ -76,6 +76,13 @@
           <option value="纳指100">纳斯达克100</option>
           <option value="标普500">标普500</option>
           <option value="上证指数">上证指数</option>
+          <option value="红利低波50">红利低波50（南方联接A 008163）</option>
+        </select>
+      </span>
+      <span class="fld" id="divmode-fld" style="display:none"><span>分红方式</span>
+        <select id="div-mode">
+          <option value="reinv" selected>红利再投资</option>
+          <option value="cash">现金分红（不再投）</option>
         </select>
       </span>
       <span class="fld"><span>每次投入（元）</span><input id="amount" type="number" min="1" step="100" value="1000"></span>
@@ -106,7 +113,7 @@
 
   <div class="card" id="chart-card" style="display:none">
     <div id="chart"></div>
-    <div class="note">「假如起点一次全买」是对照线：把你整个区间计划投入的钱（每次金额 × 期数）在第一天全部买入、之后不动。两条线对比 = 同样的钱「分批进场 vs 一把梭」谁更划算。口径：按指数收盘价模拟，不含成分股股息（跟踪该指数的基金大约还会多出股息再投收益、扣减费用）；纳指100 在 2019-04-05 前为 QQQ 复权价折算拼接，仅作趋势参考；历史模拟不代表未来收益。</div>
+    <div class="note">「假如起点一次全买」是对照线：把你整个区间计划投入的钱（每次金额 × 期数）在第一天全部买入、之后不动。两条线对比 = 同样的钱「分批进场 vs 一把梭」谁更划算。口径：指数按收盘价模拟，不含成分股股息（跟踪该指数的基金大约还会多出股息再投收益、扣减费用）；纳指100 在 2019-04-05 前为 QQQ 复权价折算拼接，仅作趋势参考。「红利低波50」（南方标普中国A股大盘红利低波50ETF联接A，008163）按基金净值模拟：买入价=扣款当日净值，已扣管理托管费、未计申购费，数据自 2020-01-21 起。分红方式二选一：红利再投资＝分红按除息日净值折算成份额继续持有（复权净值口径，享受复利）；现金分红＝每期分红按在册份额折现入现金池、不再生息（期末资产=持仓净值+累计现金，简化假设现金当日到账）——两种方式收益差距即「分红再投的复利价值」，可自行对比。历史模拟不代表未来收益。</div>
   </div>
 </div>
 
@@ -171,6 +178,15 @@ function buildIndex(idx) {
     pts.push({ d: new Date(r[0]), g: r[2] / c0 });
   }
   return pts.length ? { code: idx, pts } : null;
+}
+// 红利低波50「现金分红」模式数据：未复权单位净值 + 每份分红事件表（kline_data.js 的 DCA_FUND_META）
+function buildFundCashSeries() {
+  const meta = (window.DCA_FUND_META || {})['红利低波50'];
+  if (!meta || !Array.isArray(meta.navs) || !meta.navs.length) return null;
+  const divMap = {};
+  (meta.divs || []).forEach(([d, amt]) => { divMap[d] = (divMap[d] || 0) + Number(amt || 0); });
+  const pts = meta.navs.map(([d, v]) => ({ d: new Date(d), g: Number(v) }));
+  return { code: '红利低波50', pts, divMap };
 }
 function updateIdxHint() {
   const idx = $('#idx').value;
@@ -298,8 +314,9 @@ function renderChart(labels, invested, dcaVal, lumpVal) {
 function run() {
   const amount = Number($('#amount').value);
   if (!(amount > 0)) { showMsg('每次投入需大于 0 元'); return; }
-  const s = buildIndex($('#idx').value);
-  if (!s || s.pts.length < 30) { showMsg('指数日K数据不足：请先运行 scrape.py 生成 kline_data.js'); return; }
+  const cashMode = $('#idx').value === '红利低波50' && $('#div-mode').value === 'cash';
+  const s = cashMode ? buildFundCashSeries() : buildIndex($('#idx').value);
+  if (!s || s.pts.length < 30) { showMsg('日K/净值数据不足：请先运行 scrape.py 生成 kline_data.js'); return; }
   SERIES = s;
   populateYears();
   const yf = $('#y-from').value, yt = $('#y-to').value;
@@ -315,16 +332,24 @@ function run() {
   const buyIdx = schedule(pts, freq, D);
 
   // 定投与对照：市值 = 投入 × 期末/买入时的收盘价累计倍数（g，期初=1，指数无分红即价格回报）
-  let units = 0, invested = 0, bi = 0;
+  // 现金分红口径（红利低波50 可选）：每期分红按「当日在册份额」（不含当日新买入）折现入
+  // 现金池，不再生息；期末资产 = 持仓市值 + 现金池。对照线「一次全买」同样分红入池。
+  const divMap = s.divMap || null;   // 现金分红模式才有；按下标 d 的每份分红额
+  let units = 0, invested = 0, cash = 0, bi = 0;
   const lumpMoney = A * buyIdx.length;
   const lumpUnits = buyIdx.length ? lumpMoney / pts[buyIdx[0]].g : 0;
+  let lumpCash = 0;
   const labels = [], dcaVal = [], invLine = [], lumpVal = [];
   for (let i = 0; i < pts.length; i++) {
+    if (divMap) {
+      const div = divMap[dstr(pts[i].d)] || 0;
+      if (div) { cash += div * units; lumpCash += div * lumpUnits; }
+    }
     if (bi < buyIdx.length && buyIdx[bi] === i) { units += A / pts[i].g; invested += A; bi++; }
     labels.push(dstr(pts[i].d));
-    dcaVal.push(units * pts[i].g);
+    dcaVal.push(units * pts[i].g + cash);
     invLine.push(invested);
-    lumpVal.push(lumpUnits * pts[i].g);
+    lumpVal.push(lumpUnits * pts[i].g + lumpCash);
   }
   const endAsset = dcaVal[dcaVal.length - 1];
   const cumRet = invested > 0 ? (endAsset / invested - 1) * 100 : 0;
@@ -388,6 +413,8 @@ window.addEventListener('resize', () => { if (chart) chart.resize(); });
 /* 打开页面即读取本地指数日K（kline_data.js），把年份下拉按实际年份填好。
    图表等用户选好起止年份、点「开始模拟」后才渲染（run()）。 */
 function prepSeries() {
+  // 分红方式开关只在红利低波50（场外基金）下出现——指数本身没有分红方式一说
+  $('#divmode-fld').style.display = $('#idx').value === '红利低波50' ? '' : 'none';
   $('#y-from').innerHTML = '<option value="">加载中…</option>';
   $('#y-to').innerHTML = '<option value="">加载中…</option>';
   const s = buildIndex($('#idx').value);
