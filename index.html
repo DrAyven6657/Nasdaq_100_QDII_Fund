@@ -595,12 +595,14 @@ function applyData(d) {
   // 标普/上证=指数快照口径；昨收当日恒定，实时插件分钟刷新时直接复用，不作盘中更新）
   const mi = d.index_minutes || {};
   window.__SPARK_PRE = window.__SPARK_PRE || {};
+  window.__SPARK_LEN = window.__SPARK_LEN || {};
   [['spark-ndx', '纳指100', 1], ['spark-spx', '标普500', 1], ['spark-sh', '上证指数', 0]].forEach(([id, name, us]) => {
     const m = mi[name], q = (d.index_quotes || {})[name];
     const ref = (m && m.pre != null) ? m.pre
       : (q && q.price != null && q.change != null ? q.price - q.change : null);
     if (ref != null) window.__SPARK_PRE[id] = ref;
     drawSpark(id, m && m.pts, ref, us);
+    window.__SPARK_LEN[id] = (m && m.pts || []).length;
   });
   render();
 }
@@ -665,7 +667,10 @@ document.querySelectorAll('.chart-block').forEach(block => {
     'background:rgba(16,185,129,.12);color:#047857;border:1px solid rgba(16,185,129,.35);' +
     'font-weight:600;margin-left:2px}' +
     '.rt-badge.closed{background:rgba(100,116,139,.12);color:#64748b;' +
-    'border-color:rgba(100,116,139,.35)}';
+    'border-color:rgba(100,116,139,.35)}' +
+    '.rt-ny{font-size:10px;font-weight:600;padding:1px 6px;border-radius:4px;margin-left:2px;' +
+    'background:rgba(100,116,139,.08);color:#64748b;border:1px solid rgba(100,116,139,.22);' +
+    'font-variant-numeric:tabular-nums}';
   document.head.appendChild(style);
 
   // 美股是否开盘：按纽约时间判断，夏令时/冬令时自动正确（周一~五 9:30~16:00）
@@ -682,6 +687,33 @@ document.querySelectorAll('.chart-block').forEach(block => {
     return d.getDay() >= 1 && d.getDay() <= 5 &&
       ((mins >= 570 && mins < 690) || (mins >= 780 && mins < 900));
   }
+
+  // 徽标时间口径：一律显示当前实际时刻（Intl 按北京时间，跨时区访客看到同一时间）；
+  // 美股卡额外附当前对应的纽约时间。收市后报价轮询停止，时钟仍需走表（30 秒一跳）。
+  function clockAt(tz) {
+    try {
+      return new Intl.DateTimeFormat('en-US', { timeZone: tz, hourCycle: 'h23',
+        hour: '2-digit', minute: '2-digit' }).format(new Date());
+    } catch (e) { return ''; }
+  }
+  const nowCst = () => clockAt('Asia/Shanghai');
+  const nowNy = () => clockAt('America/New_York');
+  function setBadge(tag, open) {
+    tag.textContent = (open ? '实时 ' : '收盘 ') + nowCst();
+    tag.className = 'rt-badge' + (open ? '' : ' closed');
+  }
+  function refreshClockEls() {
+    MAP.forEach(m => {
+      const priceEl = document.getElementById(m.priceId);
+      const nameEl = priceEl && priceEl.parentElement.querySelector('.quote-name');
+      if (!nameEl) return;
+      const tag = nameEl.querySelector('.rt-badge');
+      if (tag) setBadge(tag, m.code.indexOf('gb_') === 0 ? usOpen() : cnOpen());
+      const chip = nameEl.querySelector('.rt-ny');
+      if (chip) chip.textContent = '美东 ' + nowNy();
+    });
+  }
+  setInterval(refreshClockEls, 30000);
 
   function apply(m, f) {
     let price, pct, chg, hhmm;
@@ -710,10 +742,13 @@ document.querySelectorAll('.chart-block').forEach(block => {
     if (nameEl) {
       let tag = nameEl.querySelector('.rt-badge');
       if (!tag) { tag = document.createElement('span'); tag.className = 'rt-badge'; nameEl.appendChild(tag); }
-      // 开盘时段显示「实时」，收盘/休市（含A股午休）显示「收盘」；时间一样取最后报价时刻
-      const open = m.code.indexOf('gb_') === 0 ? usOpen() : cnOpen();
-      tag.textContent = (open ? '实时 ' : '收盘 ') + hhmm;
-      tag.className = 'rt-badge' + (open ? '' : ' closed');
+      // 开盘时段显示「实时」，收盘/休市（含A股午休）显示「收盘」；时间显示当前实际时刻
+      setBadge(tag, m.code.indexOf('gb_') === 0 ? usOpen() : cnOpen());
+      if (m.us) {
+        let chip = nameEl.querySelector('.rt-ny');
+        if (!chip) { chip = document.createElement('span'); chip.className = 'rt-ny'; nameEl.appendChild(chip); }
+        chip.textContent = '美东 ' + nowNy();
+      }
     }
   }
 
@@ -742,9 +777,10 @@ document.querySelectorAll('.chart-block').forEach(block => {
   window.__rtPull = pull;    // 调试钩子：控制台输入 __rtPull() 可手动触发
 
   // 分时迷你线：每 60 秒按各自市场开盘状态增量刷新（报价接口只有快照，分时序列走 Worker /trends）
-  function minutePull(m) {
+  function minutePull(m, once) {
     const open = m.us ? usOpen() : cnOpen();
-    if (!open) return;       // 收市保持最后画面（页面刚打开时由 data.json 静态底图兜住）
+    // 开市逐分钟补帧；收市仅进页面时补拉一次（拿到比静态底图更完整的全天序列才采用），此后保持画面
+    if (!open) { if (!once || m._closed) return; m._closed = 1; }
     fetch(RT_PROXY + 'trends?secid=' + m.secid, { cache: 'no-store' })
       .then(r => r.json())
       .then(j => {
@@ -756,13 +792,18 @@ document.querySelectorAll('.chart-block').forEach(block => {
         });
         // 昨收基准读 applyData 预存的同量纲预计算值（__SPARK_PRE；当日恒定，不作盘中更新）
         const sref = (window.__SPARK_PRE || {})[m.sparkId];
-        if (pts.length >= 2 && isFinite(sref)) drawSpark(m.sparkId, pts, sref, m.us);
+        const curLen = (window.__SPARK_LEN || {})[m.sparkId] || 0;
+        // 收市补拉只有在比当前画面更完整（全天 > 半天）时才替换，避免画面来回跳变
+        if (pts.length >= 2 && isFinite(sref) && (open || pts.length > curLen)) {
+          drawSpark(m.sparkId, pts, sref, m.us);
+          window.__SPARK_LEN[m.sparkId] = pts.length;
+        }
       })
       .catch(() => {});
   }
   setInterval(() => { if (Date.now() >= restUntil) MAP.forEach(minutePull); }, 60000);
-  MAP.forEach(minutePull);   // 进页面立即对齐一次（收市时自动跳过，用静态底图）
-  window.__rtMinute = () => MAP.forEach(minutePull);   // 调试钩子
+  MAP.forEach(m => minutePull(m, 1));   // 进页面立即对齐一次；收市也补拉一次完整分时（仅此一次）
+  window.__rtMinute = once => MAP.forEach(m => minutePull(m, once));   // 调试钩子
 })();
 </script>
 </body>
