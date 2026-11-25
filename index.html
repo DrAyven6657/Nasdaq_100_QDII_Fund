@@ -11,7 +11,7 @@
     --bg: #f5f6f8; --card: #ffffff; --card-2: #f3f5f8;
     --border: #e5e7eb; --border-soft: #f1f2f4; --text: #1f2937;
     --muted: #6b7280; --up: #dc2626; --down: #16a34a;
-    --idx100: #2563eb; --idx500: #ea580c; --idxtech: #7c3aed; --idxsse: #0d9488;
+    --idx100: #2563eb; --idx500: #ea580c; --idxtech: #7c3aed; --idxsse: #0d9488; --idxcyb: #f59e0b;
     --accent: #1d4ed8; --accent-soft: #3b82f6;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -79,7 +79,7 @@
   .sort-ind { color: var(--accent-soft); font-size: 11px; }
   footer { text-align: center; color: var(--muted); font-size: 12px; margin-top: 20px; }
   /* 指数行情卡片 */
-  .quotes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 14px 0; }
+  .quotes { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin: 14px 0; }
   .quote-card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 14px 18px;
     display: flex; align-items: center; justify-content: space-between; gap: 16px; }
   .quote-main { min-width: 0; }
@@ -92,6 +92,7 @@
   .quote-dot.ndx { background: var(--idx100); }
   .quote-dot.spx { background: var(--idx500); }
   .quote-dot.sse { background: var(--idxsse); }
+  .quote-dot.cyb { background: var(--idxcyb); }
   .quote-price { font-size: 30px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.15; color: #111827; }
   .quote-change { font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; margin-top: 3px; }
   .quote-change.up { color: var(--up); }
@@ -190,6 +191,17 @@
       </div>
       <div class="quote-chart">
         <svg class="spark" id="spark-sh" viewBox="0 0 120 40" preserveAspectRatio="none" aria-hidden="true"></svg>
+        <div class="spark-axis" data-mkt="cn"><span>09:30</span><span>11:30/13:00</span><span>15:00</span></div>
+      </div>
+    </div>
+    <div class="quote-card" data-idx="创业板指">
+      <div class="quote-main">
+        <div class="quote-name"><span class="quote-dot cyb"></span>创业板指</div>
+        <div class="quote-price" id="price-cyb">—</div>
+        <div class="quote-change" id="change-cyb">—</div>
+      </div>
+      <div class="quote-chart">
+        <svg class="spark" id="spark-cyb" viewBox="0 0 120 40" preserveAspectRatio="none" aria-hidden="true"></svg>
         <div class="spark-axis" data-mkt="cn"><span>09:30</span><span>11:30/13:00</span><span>15:00</span></div>
       </div>
     </div>
@@ -464,6 +476,7 @@ function renderIndexQuotes(quotes) {
     { key: '纳指100', priceId: 'price-ndx', changeId: 'change-ndx' },
     { key: '标普500', priceId: 'price-spx', changeId: 'change-spx' },
     { key: '上证指数', priceId: 'price-sh', changeId: 'change-sh' },
+    { key: '创业板指', priceId: 'price-cyb', changeId: 'change-cyb' },
   ];
   conf.forEach(({ key, priceId, changeId }) => {
     const q = (quotes && quotes[key]) || null;
@@ -591,18 +604,24 @@ function applyData(d) {
   DATA = d.funds || [];
   document.getElementById('updated').textContent = '更新于 ' + (d.updated || '—');
   renderIndexQuotes(d.index_quotes);
-  // 分时底图：昨收基准一律用 scrape 预先算好的同量纲值（__SPARK_PRE：纳指100=QQQ 口径、
-  // 标普/上证=指数快照口径；昨收当日恒定，实时插件分钟刷新时直接复用，不作盘中更新）
+  // 分时底图：昨收基准优先用 scrape 烤库的同量纲值（__SPARK_PRE：纳指100=QQQ 口径、
+  // 标普/上证/创业板=指数口径）；实时报价落地后由报价自带的昨收字段覆盖（livePre 指数口径，
+  // QQQ 口径的纳指100除外）——零烤库也能靠服务器端实时链路直接出图
   const mi = d.index_minutes || {};
   window.__SPARK_PRE = window.__SPARK_PRE || {};
   window.__SPARK_LEN = window.__SPARK_LEN || {};
-  [['spark-ndx', '纳指100', 1], ['spark-spx', '标普500', 1], ['spark-sh', '上证指数', 0]].forEach(([id, name, us]) => {
+  window.__SPARK_PTS = {};
+  [['spark-ndx', '纳指100', 1, 0], ['spark-spx', '标普500', 1, 1], ['spark-sh', '上证指数', 0, 1], ['spark-cyb', '创业板指', 0, 1]].forEach(([id, name, us, fb]) => {
     const m = mi[name], q = (d.index_quotes || {})[name];
+    // 末位 fb：昨收兜底开关。「点位-涨跌额」是指数口径，只对曲线同为指数口径的卡片安全；
+    // 纳指100 分时是 QQQ 口径（无兜底），烤库丢了 pre 就宁可不画底图——
+    // 拿指数量纲基准怼上 QQQ 曲线会撑爆 y 轴、把曲线压成一条直线
     const ref = (m && m.pre != null) ? m.pre
-      : (q && q.price != null && q.change != null ? q.price - q.change : null);
+      : (fb && q && q.price != null && q.change != null ? q.price - q.change : null);
     if (ref != null) window.__SPARK_PRE[id] = ref;
     drawSpark(id, m && m.pts, ref, us);
     window.__SPARK_LEN[id] = (m && m.pts || []).length;
+    if (m && m.pts) window.__SPARK_PTS[id] = m.pts;
   });
   render();
 }
@@ -655,8 +674,9 @@ document.querySelectorAll('.chart-block').forEach(block => {
     // 当日走势高度一致，迷你线不展示数值；红绿仍按纳指100 自己的昨收/现价计算。
     // 东财分时经 CF 间歇性 520：页面每 60 秒轮询自动补帧，失败保留上一帧。
     { code: 'gb_ndx',   secid: '105.QQQ',    us: 1, priceId: 'price-ndx', changeId: 'change-ndx', sparkId: 'spark-ndx' },   // 纳斯达克100
-    { code: 'gb_inx',   secid: '100.SPX',    us: 1, priceId: 'price-spx', changeId: 'change-spx', sparkId: 'spark-spx' },   // 标普500
-    { code: 'sh000001', secid: '1.000001',   us: 0, priceId: 'price-sh',  changeId: 'change-sh',  sparkId: 'spark-sh' },    // 上证指数
+    { code: 'gb_inx',   secid: '100.SPX',    us: 1, livePre: 1, priceId: 'price-spx', changeId: 'change-spx', sparkId: 'spark-spx' },   // 标普500
+    { code: 'sh000001', secid: '1.000001',   us: 0, livePre: 1, priceId: 'price-sh',  changeId: 'change-sh',  sparkId: 'spark-sh' },    // 上证指数
+    { code: 'sz399006', secid: '0.399006',   us: 0, livePre: 1, priceId: 'price-cyb', changeId: 'change-cyb', sparkId: 'spark-cyb' },    // 创业板指
   ];
   // 新浪美股 gb_ 字段：0名称 1最新价 2涨跌幅% 3报价时间(北京) 4涨跌额 5开 6高 7低
   // 新浪A股字段：0名称 1今开 2昨收 3最新价 … 30日期 31时间(北京)
@@ -688,8 +708,9 @@ document.querySelectorAll('.chart-block').forEach(block => {
       ((mins >= 570 && mins < 690) || (mins >= 780 && mins < 900));
   }
 
-  // 徽标时间口径：一律显示当前实际时刻（Intl 按北京时间，跨时区访客看到同一时间）；
-  // 美股卡额外附当前对应的纽约时间。收市后报价轮询停止，时钟仍需走表（30 秒一跳）。
+  // 徽标时间口径：开市显示「实时 + 当前北京时间」（Intl 按北京时间，跨时区访客看到同一时间）；
+  // 收市显示该市场最近的收盘时间（美股冬令时 05:00 / 夏令时 04:00，A股 15:00），
+  // 避免把当前时刻误读成收盘时刻。美股卡右侧的纽约时间吊牌仍是当前时刻，照常走表（30 秒一跳）。
   function clockAt(tz) {
     try {
       return new Intl.DateTimeFormat('en-US', { timeZone: tz, hourCycle: 'h23',
@@ -698,8 +719,17 @@ document.querySelectorAll('.chart-block').forEach(block => {
   }
   const nowCst = () => clockAt('Asia/Shanghai');
   const nowNy = () => clockAt('America/New_York');
-  function setBadge(tag, open) {
-    tag.textContent = (open ? '实时 ' : '收盘 ') + nowCst();
+  // 美股收盘换算到北京时间随美东冬/夏令时切换：读当前的纽约时区缩写，EDT 即夏令时
+  function usCloseHM() {
+    try {
+      const p = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', timeZoneName: 'short' })
+        .formatToParts(new Date()).find(x => x.type === 'timeZoneName');
+      return p && p.value === 'EDT' ? '04:00' : '05:00';
+    } catch (e) { return '05:00'; }
+  }
+  function setBadge(tag, open, us) {
+    tag.textContent = open ? ('实时 ' + nowCst())
+      : (us ? '收盘 ' + usCloseHM() : '收盘 15:00');
     tag.className = 'rt-badge' + (open ? '' : ' closed');
   }
   function refreshClockEls() {
@@ -708,12 +738,25 @@ document.querySelectorAll('.chart-block').forEach(block => {
       const nameEl = priceEl && priceEl.parentElement.querySelector('.quote-name');
       if (!nameEl) return;
       const tag = nameEl.querySelector('.rt-badge');
-      if (tag) setBadge(tag, m.code.indexOf('gb_') === 0 ? usOpen() : cnOpen());
+      if (tag) setBadge(tag, m.code.indexOf('gb_') === 0 ? usOpen() : cnOpen(), m.code.indexOf('gb_') === 0);
       const chip = nameEl.querySelector('.rt-ny');
       if (chip) chip.textContent = '美东 ' + nowNy();
     });
   }
   setInterval(refreshClockEls, 30000);
+
+  // 实时尾点：把最新报价盖写当前分钟末端槽位（只改值不加坑，长度由分钟数据推进），
+  // 爆拉/跳水时曲线右端数秒内跟上。按 昨收×现价/昨收 的比例换算，天然兼容 QQQ
+  // 量纲的纳指100（指数口径卡片该式恰好等于现价本身）。
+  function updateSparkTail(sparkId, price, chg, us) {
+    const prev = price - chg;
+    if (!prev || !isFinite(prev) || !(us ? usOpen() : cnOpen())) return;
+    const pts = (window.__SPARK_PTS || {})[sparkId];
+    const pre = (window.__SPARK_PRE || {})[sparkId];
+    if (!pts || pts.length < 2 || !isFinite(pre)) return;
+    pts[pts.length - 1] = pre * price / prev;
+    drawSpark(sparkId, pts, pre, us);
+  }
 
   function apply(m, f) {
     let price, pct, chg, hhmm;
@@ -738,12 +781,19 @@ document.querySelectorAll('.chart-block').forEach(block => {
     priceEl.className = 'quote-price';        // 点数固定黑色，不随涨跌变色
     changeEl.textContent = (chg > 0 ? '+' : '') + chg.toFixed(2) + '　' + (pct > 0 ? '+' : '') + pct.toFixed(2) + '%';
     changeEl.className = 'quote-change ' + cls;   // 涨跌额/涨跌幅保持红涨绿跌
+    // 分时昨收基准：指数口径卡片用实时报价自带的昨收覆盖烤库值（服务器端链路即可出图）
+    const livePrev = (m.code.indexOf('gb_') === 0) ? price - chg : parseFloat(f[2]);
+    if (m.livePre && isFinite(livePrev)) {
+      window.__SPARK_PRE = window.__SPARK_PRE || {};
+      window.__SPARK_PRE[m.sparkId] = livePrev;
+    }
+    updateSparkTail(m.sparkId, price, chg, m.us);
     const nameEl = priceEl.parentElement.querySelector('.quote-name');
     if (nameEl) {
       let tag = nameEl.querySelector('.rt-badge');
       if (!tag) { tag = document.createElement('span'); tag.className = 'rt-badge'; nameEl.appendChild(tag); }
-      // 开盘时段显示「实时」，收盘/休市（含A股午休）显示「收盘」；时间显示当前实际时刻
-      setBadge(tag, m.code.indexOf('gb_') === 0 ? usOpen() : cnOpen());
+      // 开盘时段显示「实时 + 当前北京时间」；收盘/休市（含A股午休）显示「收盘 + 该市场收盘时间」（美股冬令时 05:00 / 夏令时 04:00，A股 15:00）
+      setBadge(tag, m.code.indexOf('gb_') === 0 ? usOpen() : cnOpen(), m.code.indexOf('gb_') === 0);
       if (m.us) {
         let chip = nameEl.querySelector('.rt-ny');
         if (!chip) { chip = document.createElement('span'); chip.className = 'rt-ny'; nameEl.appendChild(chip); }
@@ -771,8 +821,8 @@ document.querySelectorAll('.chart-block').forEach(block => {
       });
   }
 
-  // 每 5 秒一拉；美股与A股都不在开盘时段时不发请求，连续失败期间暂停
-  setInterval(() => { if ((usOpen() || cnOpen()) && Date.now() >= restUntil) pull(); }, 5000);
+  // 每 3 秒一拉（与 A股快照上游约 3 秒一跳的节拍对齐）；美股与A股都不在开盘时段时不发请求，连续失败期间暂停
+  setInterval(() => { if ((usOpen() || cnOpen()) && Date.now() >= restUntil) pull(); }, 3000);
   pull();                    // 进页面先拉一次：休市也能把最新收盘价点亮到卡片
   window.__rtPull = pull;    // 调试钩子：控制台输入 __rtPull() 可手动触发
 
@@ -791,12 +841,20 @@ document.querySelectorAll('.chart-block').forEach(block => {
           if (isFinite(v)) pts.push(v);
         });
         // 昨收基准读 applyData 预存的同量纲预计算值（__SPARK_PRE；当日恒定，不作盘中更新）
-        const sref = (window.__SPARK_PRE || {})[m.sparkId];
+        let ref = (window.__SPARK_PRE || {})[m.sparkId];
         const curLen = (window.__SPARK_LEN || {})[m.sparkId] || 0;
+        // 量纲体检：昨收必须落在曲线自身的合理邻域内，否则说明基准与曲线不同量纲
+        //（如烤库丢分时、曲线走了另一条数据源），弃用基准、照常画线（无虚线），
+        // 绝不拿错量纲的基准去撑 y 轴——那会把整条曲线压成一条直线
+        if (isFinite(ref)) {
+          const lo = Math.min.apply(null, pts), hi = Math.max.apply(null, pts);
+          if (ref < lo * 0.85 || ref > hi * 1.15) ref = null;
+        }
         // 收市补拉只有在比当前画面更完整（全天 > 半天）时才替换，避免画面来回跳变
-        if (pts.length >= 2 && isFinite(sref) && (open || pts.length > curLen)) {
-          drawSpark(m.sparkId, pts, sref, m.us);
+        if (pts.length >= 2 && (open || pts.length > curLen)) {
+          drawSpark(m.sparkId, pts, ref, m.us);
           window.__SPARK_LEN[m.sparkId] = pts.length;
+          window.__SPARK_PTS[m.sparkId] = pts;
         }
       })
       .catch(() => {});
