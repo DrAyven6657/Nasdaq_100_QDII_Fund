@@ -12,6 +12,7 @@
     --border: #e5e7eb; --border-soft: #f1f2f4; --text: #1f2937;
     --muted: #6b7280; --up: #dc2626; --down: #16a34a;
     --idx100: #2563eb; --idx500: #ea580c; --idxtech: #7c3aed; --idxsse: #0d9488; --idxcyb: #f59e0b;
+    --idxhk: #db2777; --idxau: #ca8a04; --idxkr: #7c3aed; --idxjp: #0284c7;
     --accent: #1d4ed8; --accent-soft: #3b82f6;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -21,9 +22,18 @@
     background: var(--bg); color: var(--text); line-height: 1.5; padding: 24px 16px 60px;
   }
   .container { max-width: 1200px; margin: 0 auto; }
-  header { margin-bottom: 16px; }
+  header { margin-bottom: 16px; display: flex; align-items: flex-end; justify-content: space-between;
+    gap: 14px; flex-wrap: wrap; }
   header h1 { font-size: 22px; font-weight: 700; }
   header .sub { color: var(--muted); font-size: 13px; margin-top: 4px; }
+  /* 页头「北京时间」走表：全站唯一显眼的时刻显示（秒级跳动，收市也走） */
+  .bj-clock { background: #0f172a; color: #fff; border-radius: 10px; padding: 6px 14px;
+    display: inline-flex; align-items: baseline; gap: 8px; box-shadow: 0 2px 8px rgba(15,23,42,.2);
+    flex: none; }
+  .bj-clock .lab { font-size: 11px; color: #94a3b8; font-weight: 600; align-self: center; }
+  .bj-clock .tm { font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums;
+    letter-spacing: .5px; line-height: 1; }
+  .bj-clock .sc { font-size: 13px; color: #34d399; font-weight: 600; font-variant-numeric: tabular-nums; }
   .note {
     background: #fff7ed; border: 1px solid #fed7aa; color: #9a3412;
     border-radius: 8px; padding: 10px 14px; font-size: 12.5px; margin: 12px 0;
@@ -83,8 +93,8 @@
   .quote-card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 14px 18px;
     display: flex; align-items: center; justify-content: space-between; gap: 16px; }
   .quote-main { min-width: 0; }
-  .spark { width: 128px; height: 44px; flex: none; }
-  .quote-chart { flex: none; display: flex; flex-direction: column; }
+  .spark { width: 100%; height: 72px; flex: none; }
+  .quote-chart { flex: none; width: 288px; display: flex; flex-direction: column; }
   .spark-axis { display: flex; justify-content: space-between; font-size: 9px; color: var(--muted);
     line-height: 1; margin-top: 3px; font-variant-numeric: tabular-nums; white-space: nowrap; }
   .quote-name { font-size: 13px; color: var(--muted); font-weight: 600; margin-bottom: 4px; display: flex; align-items: center; gap: 7px; }
@@ -93,6 +103,10 @@
   .quote-dot.spx { background: var(--idx500); }
   .quote-dot.sse { background: var(--idxsse); }
   .quote-dot.cyb { background: var(--idxcyb); }
+.quote-dot.hst { background: var(--idxhk); }
+.quote-dot.au { background: var(--idxau); }
+.quote-dot.kr { background: var(--idxkr); }
+.quote-dot.jp { background: var(--idxjp); }
   .quote-price { font-size: 30px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.15; color: #111827; }
   .quote-change { font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; margin-top: 3px; }
   .quote-change.up { color: var(--up); }
@@ -127,6 +141,7 @@
     table { font-size: 12px; }
     .quotes { grid-template-columns: 1fr; }
     .quote-price { font-size: 24px; }
+    .quote-chart { width: 165px; }
     .chart-wrap { height: 340px; }
     /* 手机端：额度表改卡片式，避免横向溢出 */
     .table-wrap { border: 0; border-radius: 0; background: none; overflow: visible; }
@@ -151,8 +166,15 @@
 <body>
 <div class="container">
   <header>
-    <h1>行情监控 · 场外额度监控</h1>
-    <div class="sub">QDII 指数实时行情（分时 / 实时点位）· 场外指数基金（A 类）申购状态与限购额度</div>
+    <div>
+      <h1>行情监控 · 场外额度监控</h1>
+      <div class="sub">QDII 指数实时行情（分时 / 实时点位）· 场外指数基金（A 类）申购状态与限购额度</div>
+    </div>
+    <div class="bj-clock" title="北京时间（走表）">
+      <span class="lab">北京时间</span>
+      <span class="tm" id="bj-clock-hm">--:--</span>
+      <span class="sc" id="bj-clock-ss">:--</span>
+    </div>
   </header>
 
   <div class="note">
@@ -205,6 +227,50 @@
         <div class="spark-axis" data-mkt="cn"><span>09:30</span><span>11:30/13:00</span><span>15:00</span></div>
       </div>
     </div>
+    <div class="quote-card" data-idx="恒生科技">
+      <div class="quote-main">
+        <div class="quote-name"><span class="quote-dot hst"></span>恒生科技</div>
+        <div class="quote-price" id="price-hs">—</div>
+        <div class="quote-change" id="change-hs">—</div>
+      </div>
+      <div class="quote-chart">
+        <svg class="spark" id="spark-hs" viewBox="0 0 120 40" preserveAspectRatio="none" aria-hidden="true"></svg>
+        <div class="spark-axis" data-mkt="hk"><span>09:30</span><span>12:00/13:00</span><span>16:00</span></div>
+      </div>
+    </div>
+    <div class="quote-card" data-idx="韩国综合">
+      <div class="quote-main">
+        <div class="quote-name"><span class="quote-dot kr"></span>韩国综合</div>
+        <div class="quote-price" id="price-kr">—</div>
+        <div class="quote-change" id="change-kr">—</div>
+      </div>
+      <div class="quote-chart">
+        <svg class="spark" id="spark-kr" viewBox="0 0 120 40" preserveAspectRatio="none" aria-hidden="true"></svg>
+        <div class="spark-axis" data-mkt="kr"><span>08:00</span><span>11:15</span><span>14:30</span></div>
+      </div>
+    </div>
+    <div class="quote-card" data-idx="日经225">
+      <div class="quote-main">
+        <div class="quote-name"><span class="quote-dot jp"></span>日经225</div>
+        <div class="quote-price" id="price-jp">—</div>
+        <div class="quote-change" id="change-jp">—</div>
+      </div>
+      <div class="quote-chart">
+        <svg class="spark" id="spark-jp" viewBox="0 0 120 40" preserveAspectRatio="none" aria-hidden="true"></svg>
+        <div class="spark-axis" data-mkt="jp"><span>08:00</span><span>10:30/11:30</span><span>14:30</span></div>
+      </div>
+    </div>
+    <div class="quote-card" data-idx="黄金9999">
+      <div class="quote-main">
+        <div class="quote-name"><span class="quote-dot au"></span>黄金Au99.99</div>
+        <div class="quote-price" id="price-au">—</div>
+        <div class="quote-change" id="change-au">—</div>
+      </div>
+      <div class="quote-chart">
+        <svg class="spark" id="spark-au" viewBox="0 0 120 40" preserveAspectRatio="none" aria-hidden="true"></svg>
+        <div class="spark-axis" data-mkt="au"><span>20:00</span><span>09:00</span><span>15:30</span></div>
+      </div>
+    </div>
   </div>
 
   <div class="toolbar">
@@ -244,6 +310,7 @@
   <div class="kline-tabs" id="kline-tabs" style="display:none">
     <button data-idx="纳指100" class="active">纳斯达克100</button>
     <button data-idx="标普500">标普500</button>
+    <button data-idx="上证指数">上证指数</button>
   </div>
   <div class="chart-block" data-idx="纳指100">
     <div class="chart-head">
@@ -258,7 +325,6 @@
       </span>
       <span class="range" id="range-纳指100"></span>
     </div>
-    <div class="chart-sub" id="info-纳指100"></div>
     <div class="chart-wrap" id="wrap-纳指100"></div>
   </div>
   <div class="chart-block" data-idx="标普500">
@@ -274,8 +340,22 @@
       </span>
       <span class="range" id="range-标普500"></span>
     </div>
-    <div class="chart-sub" id="info-标普500"></div>
     <div class="chart-wrap" id="wrap-标普500"></div>
+  </div>
+  <div class="chart-block" data-idx="上证指数">
+    <div class="chart-head">
+      <span class="chart-title">上证指数</span>
+      <span class="chart-price" id="price-上证指数">—</span>
+      <span class="chart-chg" id="chg-上证指数">—</span>
+      <span class="legend">
+        <span><i style="background:#f59e0b"></i>MA5 <b id="ma5-上证指数">—</b></span>
+        <span><i style="background:#7c3aed"></i>MA20 <b id="ma20-上证指数">—</b></span>
+        <span><i style="background:#db2777"></i>MA50 <b id="ma50-上证指数">—</b></span>
+        <span><i style="background:#0d9488"></i>MA200 <b id="ma200-上证指数">—</b></span>
+      </span>
+      <span class="range" id="range-上证指数"></span>
+    </div>
+    <div class="chart-wrap" id="wrap-上证指数"></div>
   </div>
 
   <footer>
@@ -477,6 +557,10 @@ function renderIndexQuotes(quotes) {
     { key: '标普500', priceId: 'price-spx', changeId: 'change-spx' },
     { key: '上证指数', priceId: 'price-sh', changeId: 'change-sh' },
     { key: '创业板指', priceId: 'price-cyb', changeId: 'change-cyb' },
+    { key: '恒生科技', priceId: 'price-hs', changeId: 'change-hs' },
+    { key: '黄金9999', priceId: 'price-au', changeId: 'change-au' },
+    { key: '韩国综合', priceId: 'price-kr', changeId: 'change-kr' },
+    { key: '日经225', priceId: 'price-jp', changeId: 'change-jp' },
   ];
   conf.forEach(({ key, priceId, changeId }) => {
     const q = (quotes && quotes[key]) || null;
@@ -547,7 +631,7 @@ document.querySelectorAll('#kline-tabs button').forEach(b => {
 function drawSpark(elId, points, ref, us) {
   const el = document.getElementById(elId);
   if (!el || !points || points.length < 2) { if (el) el.innerHTML = ''; return; }
-  const N = us ? 390 : 240;                 // 全天槽位（分钟数 = 全天点数 - 1）
+  const N = (us || 240) | 0;                // 全天槽位（分钟数-1）：美股390/A股240/港股330/黄金780/韩股390/日股330
   const W = 120, H = 40, P = 3;
   const refv = (ref === null || ref === undefined || !isFinite(ref)) ? null : ref;
   let lo = Math.min(...points), hi = Math.max(...points);
@@ -569,8 +653,14 @@ function drawSpark(elId, points, ref, us) {
       ` stroke="#9aa4b2" stroke-width=".8" stroke-dasharray="3,2.4" fill="none" vector-effect="non-scaling-stroke"/>`;
   }
   html += `<path d="${d}" fill="none" stroke="${color}" stroke-width="1.7" stroke-linejoin="round" ` +
-    `stroke-linecap="round" vector-effect="non-scaling-stroke"/>` +
-    `<circle cx="${px(points.length - 1).toFixed(2)}" cy="${py(last).toFixed(2)}" r="2.2" fill="${color}"/>`;
+    `stroke-linecap="round" vector-effect="non-scaling-stroke"/>`;
+  // 端点圆点：viewBox 是 120×40，但页面把它横向拉宽、纵向拉矮（preserveAspectRatio="none"），
+  // circle 会被拉成横椭圆；按当前渲染尺寸反算 rx/ry，把圆点固定成屏幕上 3px 半径的正圆
+  const rect = el.getBoundingClientRect();
+  const sx = rect.width / W || 1, sy = rect.height / H || 1;
+  const dr = 2;   // 圆点屏幕半径（像素）
+  html += `<ellipse cx="${px(points.length - 1).toFixed(2)}" cy="${py(last).toFixed(2)}" ` +
+    `rx="${(dr / sx).toFixed(2)}" ry="${(dr / sy).toFixed(2)}" fill="${color}"/>`;
   el.innerHTML = html;
 }
 
@@ -611,7 +701,9 @@ function applyData(d) {
   window.__SPARK_PRE = window.__SPARK_PRE || {};
   window.__SPARK_LEN = window.__SPARK_LEN || {};
   window.__SPARK_PTS = {};
-  [['spark-ndx', '纳指100', 1, 0], ['spark-spx', '标普500', 1, 1], ['spark-sh', '上证指数', 0, 1], ['spark-cyb', '创业板指', 0, 1]].forEach(([id, name, us, fb]) => {
+  [['spark-ndx', '纳指100', 390, 0], ['spark-spx', '标普500', 390, 1], ['spark-sh', '上证指数', 240, 1], ['spark-cyb', '创业板指', 240, 1],
+   ['spark-hs', '恒生科技', 330, 1], ['spark-au', '黄金9999', 780, 1],
+   ['spark-kr', '韩国综合', 390, 1], ['spark-jp', '日经225', 330, 1]].forEach(([id, name, slots, fb]) => {
     const m = mi[name], q = (d.index_quotes || {})[name];
     // 末位 fb：昨收兜底开关。「点位-涨跌额」是指数口径，只对曲线同为指数口径的卡片安全；
     // 纳指100 分时是 QQQ 口径（无兜底），烤库丢了 pre 就宁可不画底图——
@@ -619,7 +711,7 @@ function applyData(d) {
     const ref = (m && m.pre != null) ? m.pre
       : (fb && q && q.price != null && q.change != null ? q.price - q.change : null);
     if (ref != null) window.__SPARK_PRE[id] = ref;
-    drawSpark(id, m && m.pts, ref, us);
+    drawSpark(id, m && m.pts, ref, slots);
     window.__SPARK_LEN[id] = (m && m.pts || []).length;
     if (m && m.pts) window.__SPARK_PTS[id] = m.pts;
   });
@@ -662,8 +754,11 @@ document.querySelectorAll('.chart-block').forEach(block => {
 <script>
 /* ── 实时行情插件 ──────────────────────────────────────────────
    通道：yingman.chitong-indextracking.xyz（自有域名 → index-tracking Worker → 新浪行情）
-   覆盖：纳斯达克100 / 标普500（美股 gb_ 现货）、上证指数（A股 sh000001）
-   行为：美股或A股任一开盘时段每 5 秒刷新；都收盘时不发请求；
+   覆盖：纳斯达克100 / 标普500（美股 gb_ 现货）、上证指数 / 创业板指（A股）、
+         恒生科技（港股 rt_hkHSTECH）、黄金Au99.99（上金所 gds_AU9999）、
+         日经225 / 韩国综合（两家免费源都没有活码，唯东财可取，随分时轮询刷新 tq）
+   取数原则：有腾讯/新浪的先用腾讯/新浪，东财只当兜底或唯一源（见 fetchTrends 降级链）
+   行为：任一市场开盘时段每 5 秒刷新；全部收盘时不发请求；
         单次失败静默跳过（卡片保持原值），连挂 3 次自动歇 30 秒；
         任何异常均不影响页面原有功能。 ───────────────────────────── */
 (function () {
@@ -674,19 +769,46 @@ document.querySelectorAll('.chart-block').forEach(block => {
     // 当日走势高度一致，迷你线不展示数值；红绿仍按纳指100 自己的昨收/现价计算。
     // A 股分时主源=腾讯分钟线（经 Worker /tminute，实测最稳），东财 trends2 经 CF 兜底；
     // 东财通道间歇性 520：页面每 60 秒轮询自动补帧，失败保留上一帧。
-    { code: 'gb_ndx',   secid: '105.QQQ',    us: 1, priceId: 'price-ndx', changeId: 'change-ndx', sparkId: 'spark-ndx' },   // 纳斯达克100
-    { code: 'gb_inx',   secid: '100.SPX',    us: 1, livePre: 1, priceId: 'price-spx', changeId: 'change-spx', sparkId: 'spark-spx' },   // 标普500
+    { code: 'gb_ndx',   secid: '105.QQQ',    us: 1, mkt: 'us', priceId: 'price-ndx', changeId: 'change-ndx', sparkId: 'spark-ndx' },   // 纳斯达克100
+    { code: 'gb_inx',   secid: '100.SPX',    us: 1, mkt: 'us', livePre: 1, priceId: 'price-spx', changeId: 'change-spx', sparkId: 'spark-spx' },   // 标普500
     { code: 'sh000001', secid: '1.000001',   us: 0, livePre: 1, tcode: 'sh000001', priceId: 'price-sh',  changeId: 'change-sh',  sparkId: 'spark-sh' },    // 上证指数
     { code: 'sz399006', secid: '0.399006',   us: 0, livePre: 1, tcode: 'sz399006', priceId: 'price-cyb', changeId: 'change-cyb', sparkId: 'spark-cyb' },    // 创业板指
+    // 恒生科技：港股指数走腾讯分钟线（午休行自动省略，与 A 股同构）；东财兜底必须用
+    // 124.HSTECH（100.HSTECH 实测是死码：东财 trends2 返回空序列、快照名 None）
+    { code: 'rt_hkHSTECH', secid: '124.HSTECH', us: 0, mkt: 'hk', livePre: 1, tcode: 'hkHSTECH', priceId: 'price-hs', changeId: 'change-hs', sparkId: 'spark-hs' },  // 恒生科技
+    // 黄金Au99.99（上金所现货「沪金99」）：分时=东财 118.AU9999（含昨夜 20:00 起的夜盘），
+    // 涨跌按官方口径「现价−昨收」（新浪 gds 第7列 = 东财 f60）
+    { code: 'gds_AU9999', secid: '118.AU9999', us: 0, mkt: 'au', livePre: 1, priceId: 'price-au', changeId: 'change-au', sparkId: 'spark-au' },     // 黄金99.99
+    // 日经225：东财 100.N225 唯一实时源——东证 9:00~11:30/12:30~15:30 东京时间（接口输出
+    // 北京时间 08:00 起、全天 331 行）。新浪 int_nikkei 实测是整族冻结的旧快照不能用
+    // （对照实验 2026-11-25：同家族 int_sp500=6643.70，而腾讯/东财双方实时 7201.09，
+    // 隔着半年），腾讯无日韩代码——快照与分时同走东财一路（tq=「trend quote」，
+    // 由 60 秒分时轮询顺带刷新报价，末点=现价、preClose=昨收）
+    { code: '', secid: '100.N225', us: 0, mkt: 'jp', tq: 1, priceId: 'price-jp', changeId: 'change-jp', sparkId: 'spark-jp' },                        // 日经225
+    // 韩国综合 KOSPI：新浪 int_kospi 等全系变体与腾讯 kr 系代码实测全部空码——两个免费
+    // 快照源都没有这个指数，唯东财可取：快照直接读分时端点（末点=现价、preClose=昨收），
+    // 由 60 秒分时轮询顺带刷新价格（tq=「trend quote」，不走 5 秒快照）
+    { code: '', secid: '100.KS11', us: 0, mkt: 'kr', tq: 1, priceId: 'price-kr', changeId: 'change-kr', sparkId: 'spark-kr' },                        // 韩国综合
   ];
   // 新浪美股 gb_ 字段：0名称 1最新价 2涨跌幅% 3报价时间(北京) 4涨跌额 5开 6高 7低
   // 新浪A股字段：0名称 1今开 2昨收 3最新价 … 30日期 31时间(北京)
+  // 新浪港股指数字段：0代码 1名称 2今开 3昨收 4高 5低 6最新 7涨跌额 8涨跌幅% … 18日期 19时间
+  // 新浪贵金属 gds_ 字段：0最新 2买价 3卖价 4高 5低 6时间 7昨收(涨跌基准) 8今开 9量 … 13名称
+  // mkt：开市判定与分时槽位按市场走（us=美股 hk=港股 au=金交所 kr=韩股 jp=日股 其余=A股）
   // secid = 东财代码（Worker /trends 路由用，取当日分时）；us=1 表示按美股时段刷新
 
   const style = document.createElement('style');
-  style.textContent = '.rt-badge{font-size:10px;padding:1px 6px;border-radius:4px;' +
+  style.textContent = '.rt-badge{font-size:11px;padding:1px 7px;border-radius:9px;' +
     'background:rgba(16,185,129,.12);color:#047857;border:1px solid rgba(16,185,129,.35);' +
     'font-weight:600;margin-left:2px}' +
+    // 开市徽标：实心绿药丸 + 白色呼吸圆点，一眼可见「正在实时」；收市保持灰幽灵样式
+    '.rt-badge.open{background:#047857;color:#fff;border-color:#047857;' +
+    'box-shadow:0 1px 4px rgba(4,120,87,.4)}' +
+    '.rt-badge.open::before{content:"";display:inline-block;width:6px;height:6px;' +
+    'border-radius:50%;background:#fff;margin-right:4px;vertical-align:1px;' +
+    'animation:rtPulse 1.4s ease-in-out infinite}' +
+    '@keyframes rtPulse{0%,100%{opacity:1}50%{opacity:.25}}' +
+    '@media (prefers-reduced-motion:reduce){.rt-badge.open::before{animation:none}}' +
     '.rt-badge.closed{background:rgba(100,116,139,.12);color:#64748b;' +
     'border-color:rgba(100,116,139,.35)}' +
     '.rt-ny{font-size:10px;font-weight:600;padding:1px 6px;border-radius:4px;margin-left:2px;' +
@@ -708,30 +830,73 @@ document.querySelectorAll('.chart-block').forEach(block => {
     return d.getDay() >= 1 && d.getDay() <= 5 &&
       ((mins >= 570 && mins < 690) || (mins >= 780 && mins < 900));
   }
+  // 港股是否开盘：香港时间（周一~五 9:30~12:00、13:00~16:00；节假日不判断，规则同上）
+  function hkOpen() {
+    const d = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Hong_Kong' }));
+    const mins = d.getHours() * 60 + d.getMinutes();
+    return d.getDay() >= 1 && d.getDay() <= 5 &&
+      ((mins >= 570 && mins < 720) || (mins >= 780 && mins < 960));
+  }
+  // 上金所黄金是否开盘：日盘 9:00~11:30、13:30~15:30 + 夜盘 20:00~次日 02:30
+  //（夜盘跨零点：凌晨 0:00~2:30 属于前一交易日的夜盘，周六凌晨也要算开市）
+  function auOpen() {
+    const d = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Shanghai' }));
+    const wd = d.getDay(), mins = d.getHours() * 60 + d.getMinutes();
+    if (wd >= 1 && wd <= 5 && ((mins >= 540 && mins < 690) || (mins >= 810 && mins < 930))) return true;
+    if (wd >= 1 && wd <= 5 && mins >= 1200) return true;   // 周一~周五 20:00 以后
+    if (wd >= 2 && wd <= 6 && mins < 150) return true;     // 周二~周六凌晨 0:00~2:30
+    return false;
+  }
+  // 韩国股市是否开盘：首尔时间周一~五 9:00~15:30（KRX 无午休；北京时间 08:00~14:30）
+  function krOpen() {
+    const d = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
+    const mins = d.getHours() * 60 + d.getMinutes();
+    return d.getDay() >= 1 && d.getDay() <= 5 && mins >= 540 && mins < 930;
+  }
+  // 日本股市是否开盘：东京时间周一~五 9:00~11:30、12:30~15:30（2024-11 收盘延至 15:30；
+  // 北京时间 08:00~10:30、11:30~14:30）
+  function jpOpen() {
+    const d = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Tokyo' }));
+    const mins = d.getHours() * 60 + d.getMinutes();
+    return d.getDay() >= 1 && d.getDay() <= 5 && ((mins >= 540 && mins < 690) || (mins >= 750 && mins < 930));
+  }
+  // 按市场取「是否开盘」与「全天分时槽位数」（槽位 = 分钟数-1：美股391点→390，A股241→240，
+  // 港股331→330，黄金781→780（昨夜 20:00→02:30 共390行 + 今日 09:00→15:30 共391行），
+  // 韩股391→390（9:00~15:30 无午休），日股331→330（东财序列不输出午休空档））
+  function mktOpen(m) {
+    return m.mkt === 'us' ? usOpen() : m.mkt === 'hk' ? hkOpen() : m.mkt === 'au' ? auOpen()
+      : m.mkt === 'kr' ? krOpen() : m.mkt === 'jp' ? jpOpen() : cnOpen();
+  }
+  function mktSlots(m) { return m.mkt === 'us' ? 390 : m.mkt === 'hk' ? 330 : m.mkt === 'au' ? 780 : m.mkt === 'kr' ? 390 : m.mkt === 'jp' ? 330 : 240; }
 
-  // 徽标时间口径：开市显示「实时 + 当前北京时间」（Intl 按北京时间，跨时区访客看到同一时间）；
-  // 收市显示该市场最近的收盘时间（美股冬令时 05:00 / 夏令时 04:00，A股 15:00），
-  // 避免把当前时刻误读成收盘时刻。美股卡右侧的纽约时间吊牌仍是当前时刻，照常走表（30 秒一跳）。
-  function clockAt(tz) {
+  // 徽标时间口径：状态词区分开市/收市，时间一律显示当前实际时刻（Intl 按北京时间，
+  // 跨时区访客看到同一时刻）；美股卡右侧另有当前对应的纽约时间。收市后报价轮询停止，
+  // 时钟仍走表（30 秒一跳）。
+  function clockAt(tz, withSec) {
     try {
       return new Intl.DateTimeFormat('en-US', { timeZone: tz, hourCycle: 'h23',
-        hour: '2-digit', minute: '2-digit' }).format(new Date());
+        hour: '2-digit', minute: '2-digit', ...(withSec ? { second: '2-digit' } : {}) }).format(new Date());
     } catch (e) { return ''; }
   }
   const nowCst = () => clockAt('Asia/Shanghai');
   const nowNy = () => clockAt('America/New_York');
-  // 美股收盘换算到北京时间随美东冬/夏令时切换：读当前的纽约时区缩写，EDT 即夏令时
-  function usCloseHM() {
-    try {
-      const p = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', timeZoneName: 'short' })
-        .formatToParts(new Date()).find(x => x.type === 'timeZoneName');
-      return p && p.value === 'EDT' ? '04:00' : '05:00';
-    } catch (e) { return '05:00'; }
-  }
-  function setBadge(tag, open, us) {
-    tag.textContent = open ? ('实时 ' + nowCst())
-      : (us ? '收盘 ' + usCloseHM() : '收盘 15:00');
-    tag.className = 'rt-badge' + (open ? '' : ' closed');
+  // 页头「北京时间」走表：秒级跳动，全站唯一时刻显示（与行情轮询无关，收市也走）
+  (function () {
+    const hmEl = document.getElementById('bj-clock-hm');
+    const ssEl = document.getElementById('bj-clock-ss');
+    if (!hmEl || !ssEl) return;
+    const tick = () => {
+      const t = clockAt('Asia/Shanghai', true);   // "HH:MM:SS"
+      hmEl.textContent = t.slice(0, 5);
+      ssEl.textContent = t.slice(5, 8);
+    };
+    tick();
+    setInterval(tick, 1000);
+  })();
+  function setBadge(tag, open) {
+    // 徽标只当状态灯：只显示「实时 / 收盘」状态词，不带时间——全站时刻集中在页头走表
+    tag.textContent = open ? '实时' : '收盘';
+    tag.className = 'rt-badge' + (open ? ' open' : ' closed');
   }
   function refreshClockEls() {
     MAP.forEach(m => {
@@ -739,7 +904,7 @@ document.querySelectorAll('.chart-block').forEach(block => {
       const nameEl = priceEl && priceEl.parentElement.querySelector('.quote-name');
       if (!nameEl) return;
       const tag = nameEl.querySelector('.rt-badge');
-      if (tag) setBadge(tag, m.code.indexOf('gb_') === 0 ? usOpen() : cnOpen(), m.code.indexOf('gb_') === 0);
+      if (tag) setBadge(tag, mktOpen(m));
       const chip = nameEl.querySelector('.rt-ny');
       if (chip) chip.textContent = '美东 ' + nowNy();
     });
@@ -749,14 +914,18 @@ document.querySelectorAll('.chart-block').forEach(block => {
   // 实时尾点：把最新报价盖写当前分钟末端槽位（只改值不加坑，长度由分钟数据推进），
   // 爆拉/跳水时曲线右端数秒内跟上。按 昨收×现价/昨收 的比例换算，天然兼容 QQQ
   // 量纲的纳指100（指数口径卡片该式恰好等于现价本身）。
-  function updateSparkTail(sparkId, price, chg, us) {
+  function updateSparkTail(sparkId, price, chg, m) {
     const prev = price - chg;
-    if (!prev || !isFinite(prev) || !(us ? usOpen() : cnOpen())) return;
+    if (!prev || !isFinite(prev) || !mktOpen(m)) return;
     const pts = (window.__SPARK_PTS || {})[sparkId];
     const pre = (window.__SPARK_PRE || {})[sparkId];
     if (!pts || pts.length < 2 || !isFinite(pre)) return;
+    // 量纲体检：昨收基准必须落在曲线自身的合理邻域内，否则数据源与曲线不同量纲
+    //（如换兜底源后口径漂了），直接收手不写尾点——绝不用错量纲基准盖飞曲线末端
+    const lo = Math.min(...pts), hi = Math.max(...pts);
+    if (pre < lo * 0.85 || pre > hi * 1.15) return;
     pts[pts.length - 1] = pre * price / prev;
-    drawSpark(sparkId, pts, pre, us);
+    drawSpark(sparkId, pts, pre, mktSlots(m));
   }
 
   function apply(m, f) {
@@ -765,6 +934,20 @@ document.querySelectorAll('.chart-block').forEach(block => {
       // 美股 gb_ 现货：1最新价 2涨跌幅% 3报价时间 4涨跌额
       price = parseFloat(f[1]); pct = parseFloat(f[2]); chg = parseFloat(f[4]);
       hhmm = (f[3] || '').slice(11, 16);
+    } else if (m.code.indexOf('rt_hk') === 0) {
+      // 港股指数：2今开 3昨收 4高 5低 6最新 7涨跌额 8涨跌幅%
+      price = parseFloat(f[6]);
+      const prev = parseFloat(f[3]);
+      chg = parseFloat(f[7]);
+      pct = parseFloat(f[8]);
+      hhmm = (f[19] || '').slice(0, 5);
+    } else if (m.code.indexOf('gds_') === 0) {
+      // 上金所贵金属：0最新 4高 5低 6时间 7昨收(官方涨跌基准，上金所口径)
+      price = parseFloat(f[0]);
+      const prev = parseFloat(f[7]);
+      chg = price - prev;
+      pct = prev > 0 ? chg / prev * 100 : NaN;
+      hhmm = f[6] || '';
     } else {
       // A股指数：2昨收 3最新价 31时间（涨跌额/涨跌幅由昨收现算）
       price = parseFloat(f[3]);
@@ -774,6 +957,22 @@ document.querySelectorAll('.chart-block').forEach(block => {
       hhmm = (f[31] || '').slice(0, 5);
     }
     if (!isFinite(price) || !isFinite(pct) || !isFinite(chg)) return;
+    // 分时昨收基准：指数口径卡片用实时报价自带的昨收覆盖烤库值（服务器端链路即可出图）
+    const livePrev = (m.code.indexOf('gb_') === 0) ? price - chg
+      : (m.code.indexOf('gds_') === 0) ? parseFloat(f[7])
+      : (m.code.indexOf('rt_hk') === 0) ? parseFloat(f[3])
+      : parseFloat(f[2]);
+    if (m.livePre && isFinite(livePrev)) {
+      window.__SPARK_PRE = window.__SPARK_PRE || {};
+      window.__SPARK_PRE[m.sparkId] = livePrev;
+    }
+    paintQuote(m, price, chg, pct);
+  }
+
+  // 上卡片统一画法（报价 5 秒轮询与 tq 指数 60 秒分时轮询共用）：点数固定黑色、
+  // 涨跌额/% 红涨绿跌、角标按市场开市状态走、美股卡附当前纽约时刻
+  function paintQuote(m, price, chg, pct) {
+    if (!isFinite(price) || !isFinite(chg) || !isFinite(pct)) return;
     const priceEl = document.getElementById(m.priceId);
     const changeEl = document.getElementById(m.changeId);
     if (!priceEl || !changeEl) return;
@@ -782,20 +981,14 @@ document.querySelectorAll('.chart-block').forEach(block => {
     priceEl.className = 'quote-price';        // 点数固定黑色，不随涨跌变色
     changeEl.textContent = (chg > 0 ? '+' : '') + chg.toFixed(2) + '　' + (pct > 0 ? '+' : '') + pct.toFixed(2) + '%';
     changeEl.className = 'quote-change ' + cls;   // 涨跌额/涨跌幅保持红涨绿跌
-    // 分时昨收基准：指数口径卡片用实时报价自带的昨收覆盖烤库值（服务器端链路即可出图）
-    const livePrev = (m.code.indexOf('gb_') === 0) ? price - chg : parseFloat(f[2]);
-    if (m.livePre && isFinite(livePrev)) {
-      window.__SPARK_PRE = window.__SPARK_PRE || {};
-      window.__SPARK_PRE[m.sparkId] = livePrev;
-    }
-    updateSparkTail(m.sparkId, price, chg, m.us);
+    updateSparkTail(m.sparkId, price, chg, m);
     const nameEl = priceEl.parentElement.querySelector('.quote-name');
     if (nameEl) {
       let tag = nameEl.querySelector('.rt-badge');
       if (!tag) { tag = document.createElement('span'); tag.className = 'rt-badge'; nameEl.appendChild(tag); }
-      // 开盘时段显示「实时 + 当前北京时间」；收盘/休市（含A股午休）显示「收盘 + 该市场收盘时间」（美股冬令时 05:00 / 夏令时 04:00，A股 15:00）
-      setBadge(tag, m.code.indexOf('gb_') === 0 ? usOpen() : cnOpen(), m.code.indexOf('gb_') === 0);
-      if (m.us) {
+      // 状态词区分开市/收市（含A股午休、港股午休、金交所夜盘），时间恒为当前北京时间
+      setBadge(tag, mktOpen(m));
+      if (m.mkt === 'us') {
         let chip = nameEl.querySelector('.rt-ny');
         if (!chip) { chip = document.createElement('span'); chip.className = 'rt-ny'; nameEl.appendChild(chip); }
         chip.textContent = '美东 ' + nowNy();
@@ -812,6 +1005,7 @@ document.querySelectorAll('.chart-block').forEach(block => {
       .then(txt => {
         clearTimeout(timer);
         MAP.forEach(m => {
+          if (!m.code) return;   // tq 指数（韩国综合）无快照码，报价随分时轮询刷新
           const mtch = txt.match(new RegExp('hq_str_' + m.code + '="([^"]*)"'));
           if (mtch) apply(m, mtch[1].split(','));
         });
@@ -822,19 +1016,33 @@ document.querySelectorAll('.chart-block').forEach(block => {
       });
   }
 
-  // 每 3 秒一拉（与 A股快照上游约 3 秒一跳的节拍对齐）；美股与A股都不在开盘时段时不发请求，连续失败期间暂停
-  setInterval(() => { if ((usOpen() || cnOpen()) && Date.now() >= restUntil) pull(); }, 3000);
+  // 每 5 秒一拉（观感依旧连贯，Worker 调用量比 3 秒省四成）；六个市场都不在开盘时段时不发请求，连续失败期间暂停
+  setInterval(() => { if ((usOpen() || cnOpen() || hkOpen() || auOpen() || krOpen() || jpOpen()) && Date.now() >= restUntil) pull(); }, 5000);
   pull();                    // 进页面先拉一次：休市也能把最新收盘价点亮到卡片
   window.__rtPull = pull;    // 调试钩子：控制台输入 __rtPull() 可手动触发
 
-  // 分时取数降级链：腾讯（/tminute，A 股主源、实测最稳）→ 东财（/trends，兜底）。
-  // Worker 未部署 /tminute（404）或其上游闪断时自动落到下一级，无需任何配置。
+  // 分时取数降级链：腾讯分钟线（/tminute，A 股/港股主源、实测最稳）→ 东财经 CF（/trends）
+  // → 访客浏览器直连东财（最终兜底）。东财会成波地封 Cloudflare 机房 IP（整条 /trends 一齐
+  // 520，一波可持续几分钟到更久）；封锁波高峰时它连浏览器直连也会按指纹掐断（2026-11-25
+  // 实测：同几分钟内 urllib 能通、页面 fetch 被拒），这类时段只能靠 60 秒轮询等到波谷。
   function fetchTrends(m) {
     const urls = [];
     if (m.tcode) urls.push(RT_PROXY + 'tminute?code=' + m.tcode);
     urls.push(RT_PROXY + 'trends?secid=' + m.secid);
+    urls.push('https://push2his.eastmoney.com/api/qt/stock/trends2/get?secid=' + m.secid +
+      '&fields1=f1,f2,f3,f7,f8&fields2=f51,f53,f56,f58&ndays=1&iscr=0');
+    // 关键：东财「半故障期」会返回 200 + 空数据（data.trends 缺失或空数组），若把空应答当
+    // 成功，链条会停在这儿、永远不落到直连兜底——必须把「解析后不足 2 个点」也当失败传下去
+    const count = j => {
+      const d = (j && j.data) || {};
+      if (Array.isArray(d.trends)) return d.trends.length;
+      let rows = m.tcode && d[m.tcode] && d[m.tcode].data && d[m.tcode].data.data;
+      rows = typeof rows === 'string' ? rows.split(';') : (Array.isArray(rows) ? rows : []);
+      return rows.length;
+    };
     return urls.reduce((chain, u) => chain.catch(() =>
       fetch(u, { cache: 'no-store' }).then(r => { if (!r.ok) throw 0; return r.json(); })
+        .then(j => { if (count(j) < 2) throw 0; return j; })
     ), Promise.reject());
   }
   // 兼容两种返回形态：东财 trends2 的 data.trends=[“日期 时间,价,…”]、
@@ -858,8 +1066,21 @@ document.querySelectorAll('.chart-block').forEach(block => {
     return out;
   }
   // 分时迷你线：每 60 秒按各自市场开盘状态增量刷新（报价接口只有快照，分时序列走 Worker /trends）
+  // tq 烤库兜底：日经225/韩国综合的实时链路全断（东财封波）时，收市态直接用烤库分时
+  // 末点当收盘价上卡（烤库在收市后生成，末点=当日收盘，顺带点亮「收盘」角标）；
+  // 开市中不用烤库旧值（等实时链路恢复再刷新）
+  function paintTqFromBaked(m) {
+    if (!m.tq || mktOpen(m)) return;
+    const pts = (window.__SPARK_PTS || {})[m.sparkId];
+    const ref = (window.__SPARK_PRE || {})[m.sparkId];
+    if (pts && pts.length >= 2 && isFinite(ref)) {
+      const lp = pts[pts.length - 1];
+      paintQuote(m, lp, lp - ref, (lp - ref) / ref * 100);
+    }
+  }
   function minutePull(m, once) {
-    const open = m.us ? usOpen() : cnOpen();
+    const open = mktOpen(m);
+    paintTqFromBaked(m);
     // 开市逐分钟补帧；收市仅进页面时补拉一次（拿到比静态底图更完整的全天序列才采用），此后保持画面
     if (!open) { if (!once || m._closed) return; m._closed = 1; }
     fetchTrends(m)
@@ -876,10 +1097,19 @@ document.querySelectorAll('.chart-block').forEach(block => {
           if (ref < lo * 0.85 || ref > hi * 1.15) ref = null;
         }
         // 收市补拉只有在比当前画面更完整（全天 > 半天）时才替换，避免画面来回跳变
-        if (pts.length >= 2 && (open || pts.length > curLen)) {
-          drawSpark(m.sparkId, pts, ref, m.us);
-          window.__SPARK_LEN[m.sparkId] = pts.length;
-          window.__SPARK_PTS[m.sparkId] = pts;
+        if (pts.length >= 2) {
+          // 收市补拉只有在比当前画面更完整（全天 > 半天）时才替换，避免画面来回跳变
+          if (open || pts.length > curLen) {
+            drawSpark(m.sparkId, pts, ref, mktSlots(m));
+            window.__SPARK_LEN[m.sparkId] = pts.length;
+            window.__SPARK_PTS[m.sparkId] = pts;
+          }
+          // tq 指数（日经225/韩国综合）无快照源：末点=现价、画线基准=昨收，
+          // 随分时轮询顺带上卡片（收市也要点亮当日收盘价与「收盘」角标）
+          if (m.tq && isFinite(ref)) {
+            const lp = pts[pts.length - 1];
+            paintQuote(m, lp, lp - ref, (lp - ref) / ref * 100);
+          }
         }
       })
       .catch(() => {});

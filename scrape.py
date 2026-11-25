@@ -242,14 +242,59 @@ INDEX_QUOTES = {
     "标普500": "us.INX",
     "上证指数": "sh000001",
     "创业板指": "sz399006",
+    "恒生科技": "hkHSTECH",
 }
 
 
+# ---------------------------------------------------------------- 韩日指数（唯东财可取）
+# 新浪 int_ 国际指数家族实测是整族冻结的旧收盘快照（对照实验 2026-11-25：同家族
+# int_sp500=6643.70，与腾讯/东财双方实时的 7201.09 都对不上，int_nikkei 同理停更），
+# 腾讯无日韩指数代码——日经225/韩国综合的免费实时源唯东财一家。
+# 快照读 trends2（末点=现价、昨收=preClose），分时用同一份序列，进程内缓存免二次抓取。
+_EAST_TRENDS_CACHE = {}
+
+
+def _east_index_trends(secid):
+    """东财世界指数当日分时（韩日唯一实时源）：返回 (昨收, 分钟点列表)。
+
+    Worker /trends 优先、直连东财兜底（东财对机房 IP 间歇 520，各 2 次 × 2 秒重试）；
+    命中 _EAST_TRENDS_CACHE 直接返回——与 fetch_index_quotes 的快照共用一次请求。
+    """
+    import kline_data
+    if _EAST_TRENDS_CACHE.get(secid):
+        c = _EAST_TRENDS_CACHE[secid]
+        return c["pre"], c["pts"]
+    urls = [
+        f"{kline_data.WORKER_HOST}/trends?secid={secid}",
+        ("https://push2his.eastmoney.com/api/qt/stock/trends2/get"
+         f"?secid={secid}&fields1=f1,f2,f3,f7,f8&fields2=f51,f53,f56,f58&ndays=1&iscr=0"),
+    ]
+    last_err = None
+    for url in urls:
+        for _ in range(3):   # 东财闪断重试
+            try:
+                d = json.loads(fetch(url, raw=True)).get("data") or {}
+                rows = d.get("trends") or []
+                pts = [float(r.split(",")[1]) for r in rows if "," in r]
+                pre = float(d.get("preClose") or 0)
+                if len(pts) >= 5 and pre > 0:
+                    _EAST_TRENDS_CACHE[secid] = {"pre": pre, "pts": pts}
+                    return pre, pts
+                raise ValueError("trends2 数据不完整（点数不足或缺昨收）")
+            except Exception as e:  # noqa
+                last_err = e
+            time.sleep(2.0)
+    raise last_err or RuntimeError(f"{secid} trends2 不可用")
+
+
 def fetch_index_quotes():
-    """抓取纳指100/标普500 实时点位与今日涨跌（点数、百分比）。
+    """抓取八项指数卡片的实时点位与今日涨跌（点数、百分比）。
 
     返回 {"纳指100": {"name":..., "price":..., "change":..., "pct":...}, ...}
-    字段取自腾讯行情：f[3]=点位, f[31]=涨跌点数, f[32]=涨跌百分比。
+    取数原则：有腾讯/新浪的先用腾讯/新浪，东财只当兜底或唯一源（东财最后）：
+    纳指100/标普500/上证/创业板/恒生科技 → 腾讯（f[3]=点位, f[31]=涨跌点数,
+    f[32]=涨跌百分比）；黄金 → 新浪 gds_AU9999；日经225/韩国综合 → 唯东财可取
+    （新浪 int_ 家族冻结、腾讯无码，trends2 末点=现价，见 _east_index_trends）。
     """
     result = {}
     symbols = ",".join(INDEX_QUOTES.values())
@@ -284,6 +329,36 @@ def fetch_index_quotes():
             "change": _fnum(31),
             "pct": _fnum(32),
         }
+    # 黄金 Au99.99（上金所现货「沪金99」）：腾讯无代码，走新浪贵金属接口。
+    # 新浪 gds_ 字段：0最新 4高 5低 6时间 7昨收(官方涨跌基准) 8今开；涨跌=现价-昨收。
+    try:
+        raw = fetch("https://hq.sinajs.cn/list=gds_AU9999",
+                    referer="https://finance.sina.com.cn/", raw=True)
+        g = raw.decode("gbk", errors="replace").split('"')[1].split(",")
+        price = float(g[0])
+        prev = float(g[7])
+        result["黄金9999"] = {
+            "name": "黄金Au99.99",
+            "price": price,
+            "change": price - prev,
+            "pct": (price - prev) / prev * 100,
+        }
+    except Exception as e:  # noqa
+        print(f"  [提示] 黄金 Au99.99 快照获取失败: {e}")
+    # 日经225 / 韩国综合：新浪 int_ 家族冻结、腾讯无码——唯东财可取，trends2 端点
+    #（末点=现价，昨收=preClose，涨跌按官方口径「现价−昨收」）
+    for name_, secid_ in (("日经225", "100.N225"), ("韩国综合", "100.KS11")):
+        try:
+            pre, pts = _east_index_trends(secid_)
+            price = pts[-1]
+            result[name_] = {
+                "name": name_,
+                "price": price,
+                "change": price - pre,
+                "pct": (price - pre) / pre * 100,
+            }
+        except Exception as e:  # noqa
+            print(f"  [提示] {name_} 快照获取失败: {e}")
     return result
 
 
@@ -335,25 +410,35 @@ def _tencent_minutes(code):
 
 
 def fetch_index_minutes(index_quotes=None):
-    """抓取四只指数的当日分时，供卡片迷你走势线（离线/file:// 时的静态底图）。
+    """抓取八项行情卡的当日分时，供卡片迷你走势线（离线/file:// 时的静态底图）。
 
-    返回 {指数名: {"pre": 昨收（与曲线同量纲）, "pts": [当日分钟价格, …]}}，
-    获取失败的指数不进结果。源优先级：A 股（上证/创业板）先走腾讯 minute/query 直连
-    （实测最稳），失败再退东财 trends2 经 CF（间歇 520，6 次 × 2 秒重试）；
-    美股指数无腾讯分时，直接走东财经 CF。
+    返回 {名称: {"pre": 昨收（与曲线同量纲）, "pts": [当日分钟价格, …]}}，
+    获取失败的项不进结果。源优先级（有腾讯/新浪先用腾讯/新浪，东财最后）：
+    A 股/港股（上证/创业板/恒生科技）先走腾讯 minute/query 直连（实测最稳，
+    港股午休行自动省略），失败再退东财 trends2 经 CF（间歇 520，6 次 × 2 秒重试）；
+    美股/韩日指数两家免费源都没有分时接口（新浪国际无分钟序列、腾讯无日韩代码），
+    东财是唯一来源，直接经 CF；日经225/韩国综合复用快照阶段的缓存；
+    黄金 Au99.99 分时 = 东财 118.AU9999（含昨夜 20:00 起的夜盘）经 CF。
     """
     import kline_data
-    secids = {"纳指100": "105.QQQ", "标普500": "100.SPX", "上证指数": "1.000001", "创业板指": "0.399006"}
-    tz_codes = {"上证指数": "sh000001", "创业板指": "sz399006"}
+    secids = {"纳指100": "105.QQQ", "标普500": "100.SPX", "上证指数": "1.000001",
+              "创业板指": "0.399006", "恒生科技": "124.HSTECH", "黄金9999": "118.AU9999",
+              "韩国综合": "100.KS11", "日经225": "100.N225"}
+    tz_codes = {"上证指数": "sh000001", "创业板指": "sz399006", "恒生科技": "hkHSTECH"}
     index_quotes = index_quotes or {}
     result = {}
     for name, secid in secids.items():
         got = None
-        # ① A 股：腾讯分时直连
-        if name in tz_codes:
+        # ⓪ 日经225/韩国综合：快照阶段已抓过 trends2（唯东财可取），直接复用不再二次请求
+        if name in ("日经225", "韩国综合"):
+            cached = _EAST_TRENDS_CACHE.get(secid)
+            if cached and cached.get("pts"):
+                got = (cached["pts"], None, "东财", cached["pre"])
+        # ① A 股/港股：腾讯分时直连
+        if not got and name in tz_codes:
             pts = _tencent_minutes(tz_codes[name])
             if pts:
-                got = (pts, None)
+                got = (pts, None, "腾讯", 0)
         # ② 东财 trends2 经 CF（兜底；美股指数唯一来源）
         if not got:
             last_err = None
@@ -369,13 +454,14 @@ def fetch_index_minutes(index_quotes=None):
                         except (IndexError, ValueError):
                             continue
                     if len(pts) >= 5:
-                        got = (pts, rows[0].split(",")[0][:10])  # 首行时间戳的日期部分
+                        got = (pts, rows[0].split(",")[0][:10], "东财",
+                               float(d.get("preClose") or 0))  # 首行时间戳的日期部分
                         break
                 except Exception as e:  # noqa
                     last_err = e
                 time.sleep(2.0)
         if got:
-            pts, minute_date = got
+            pts, minute_date, label, east_pre = got
             if name == "纳指100":
                 pre = _qqq_prev_close(minute_date)
             else:
@@ -383,9 +469,9 @@ def fetch_index_minutes(index_quotes=None):
                 if q.get("price") is not None and q.get("change") is not None:
                     pre = q["price"] - q["change"]
                 else:
-                    pre = None
+                    pre = east_pre or None   # 东财响应自带的 preClose（与点序列同源同量纲）
             result[name] = {"pre": pre, "pts": pts}
-            print(f"  {name} 分时({'腾讯' if minute_date is None else '东经CF'}): "
+            print(f"  {name} 分时({label}): "
                   f"{len(pts)} 个分钟点，昨收 {pre}")
         else:
             print(f"  [警告] {name} 分时获取失败: {last_err}")
