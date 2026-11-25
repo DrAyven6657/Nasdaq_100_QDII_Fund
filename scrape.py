@@ -235,11 +235,13 @@ def fetch_fees(code):
 
 
 # ---------------------------------------------------------------- 指数实时点位
-# 数据源：腾讯行情 qt.gtimg.cn（us.NDX=纳斯达克100，us.INX=标普500，sh000001=上证指数，
+# 数据源：腾讯行情 qt.gtimg.cn（us.NDX=纳斯达克100，us.INX=标普500，sh000001=上证指数，sz399006=创业板指，
+# 与场内 ETF 同一接口，字段位次统一：f3=点位 f31=涨跌 f32=涨跌%）。
 INDEX_QUOTES = {
     "纳指100": "us.NDX",
     "标普500": "us.INX",
     "上证指数": "sh000001",
+    "创业板指": "sz399006",
 }
 
 
@@ -317,7 +319,7 @@ def fetch_index_minutes(index_quotes=None):
     获取失败的指数不进结果。东财 trends2 经 CF 间歇性 520，按次数重试择先成功。
     """
     import kline_data
-    secids = {"纳指100": "105.QQQ", "标普500": "100.SPX", "上证指数": "1.000001"}
+    secids = {"纳指100": "105.QQQ", "标普500": "100.SPX", "上证指数": "1.000001", "创业板指": "0.399006"}
     index_quotes = index_quotes or {}
     result = {}
     for name, secid in secids.items():
@@ -459,22 +461,27 @@ def main():
 
     # 指数实时点位与今日涨跌（纳指100 / 标普500）
     index_quotes = fetch_index_quotes()
-    # 兜底：指数行情获取失败时沿用上一次的数据，避免卡片空白
-    if not index_quotes and os.path.exists(OUT_FILE):
+    # 兜底：哪个指数行情没抓到就逐个沿用它上一次的数据（按指数补，不再全军覆没才兜），
+    # 避免单只指数卡片空白
+    if os.path.exists(OUT_FILE):
         try:
-            old = json.load(open(OUT_FILE, encoding="utf-8"))
-            index_quotes = old.get("index_quotes") or {}
+            old_q = (json.load(open(OUT_FILE, encoding="utf-8")).get("index_quotes") or {})
+            for k, v in old_q.items():
+                index_quotes.setdefault(k, v)
         except Exception:
             pass
     print(f"  指数点位: {', '.join(k + ' ' + str(v.get('price')) for k, v in index_quotes.items())}")
 
     # 指数当日分时（卡片迷你走势线底图）
     index_minutes = fetch_index_minutes(index_quotes)
-    # 兜底：分时全部获取失败时沿用上一次的底图，避免迷你线空白
-    if not index_minutes and os.path.exists(OUT_FILE):
+    # 兜底：单只指数分时抓空时逐只沿用上一次的底图（东财 520 闪断常见）。
+    # 这里必须逐只补：pre 和 pts 是一对，烤库丢哪只指数，哪只卡片就缺失同量纲基准，
+    # 页面若有错误量纲的兜底路径会把整条曲线压成一条直线
+    if os.path.exists(OUT_FILE):
         try:
-            old = json.load(open(OUT_FILE, encoding="utf-8"))
-            index_minutes = old.get("index_minutes") or {}
+            old_m = (json.load(open(OUT_FILE, encoding="utf-8")).get("index_minutes") or {})
+            for k, v in old_m.items():
+                index_minutes.setdefault(k, v)
         except Exception:
             pass
 
