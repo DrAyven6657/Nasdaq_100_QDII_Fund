@@ -312,35 +312,68 @@ def _qqq_prev_close(minute_date):
         return None
 
 
+def _tencent_minutes(code):
+    """腾讯分时（A 股最稳源）：web.ifzq.gtimg.cn 分钟序列，行格式「0930 2233.18 量 额」。"""
+    try:
+        j = json.loads(fetch(f"https://web.ifzq.gtimg.cn/appstock/app/minute/query?code={code}",
+                             referer="https://gu.qq.com/"))
+        node = (j.get("data") or {}).get(code) or {}
+        d = node.get("data") or {}
+        rows = d.get("data")
+        if isinstance(rows, str):
+            rows = rows.split(";")
+        pts = []
+        for row in rows or []:
+            try:
+                pts.append(float(str(row).split()[1]))
+            except (IndexError, ValueError, TypeError):
+                continue
+        return pts if len(pts) >= 5 else None
+    except Exception as e:  # noqa
+        print(f"  [提示] 腾讯分时 {code} 不可用: {e}")
+        return None
+
+
 def fetch_index_minutes(index_quotes=None):
-    """抓取三个指数的当日分时，供卡片迷你走势线（离线/file:// 时的静态底图）。
+    """抓取四只指数的当日分时，供卡片迷你走势线（离线/file:// 时的静态底图）。
 
     返回 {指数名: {"pre": 昨收（与曲线同量纲）, "pts": [当日分钟价格, …]}}，
-    获取失败的指数不进结果。东财 trends2 经 CF 间歇性 520，按次数重试择先成功。
+    获取失败的指数不进结果。源优先级：A 股（上证/创业板）先走腾讯 minute/query 直连
+    （实测最稳），失败再退东财 trends2 经 CF（间歇 520，6 次 × 2 秒重试）；
+    美股指数无腾讯分时，直接走东财经 CF。
     """
     import kline_data
     secids = {"纳指100": "105.QQQ", "标普500": "100.SPX", "上证指数": "1.000001", "创业板指": "0.399006"}
+    tz_codes = {"上证指数": "sh000001", "创业板指": "sz399006"}
     index_quotes = index_quotes or {}
     result = {}
     for name, secid in secids.items():
-        got, last_err = None, None
-        for _ in range(6):  # 上游闪断 520 重试，2 秒间隔（QQQ 通道成功率最低，放宽重试）
-            try:
-                data = json.loads(fetch(f"{kline_data.WORKER_HOST}/trends?secid={secid}", raw=True))
-                d = data.get("data") or {}
-                rows = d.get("trends") or []
-                pts = []
-                for row in rows:
-                    try:
-                        pts.append(float(row.split(",")[1]))
-                    except (IndexError, ValueError):
-                        continue
-                if len(pts) >= 5:
-                    got = (pts, rows[0].split(",")[0][:10])  # 首行时间戳的日期部分
-                    break
-            except Exception as e:  # noqa
-                last_err = e
-            time.sleep(2.0)
+        got = None
+        # ① A 股：腾讯分时直连
+        if name in tz_codes:
+            pts = _tencent_minutes(tz_codes[name])
+            if pts:
+                got = (pts, None)
+        # ② 东财 trends2 经 CF（兜底；美股指数唯一来源）
+        if not got:
+            last_err = None
+            for _ in range(6):  # 上游闪断 520 重试，2 秒间隔（QQQ 通道成功率最低，放宽重试）
+                try:
+                    data = json.loads(fetch(f"{kline_data.WORKER_HOST}/trends?secid={secid}", raw=True))
+                    d = data.get("data") or {}
+                    rows = d.get("trends") or []
+                    pts = []
+                    for row in rows:
+                        try:
+                            pts.append(float(row.split(",")[1]))
+                        except (IndexError, ValueError):
+                            continue
+                    if len(pts) >= 5:
+                        got = (pts, rows[0].split(",")[0][:10])  # 首行时间戳的日期部分
+                        break
+                except Exception as e:  # noqa
+                    last_err = e
+                time.sleep(2.0)
         if got:
             pts, minute_date = got
             if name == "纳指100":
@@ -352,7 +385,8 @@ def fetch_index_minutes(index_quotes=None):
                 else:
                     pre = None
             result[name] = {"pre": pre, "pts": pts}
-            print(f"  {name} 分时: {len(pts)} 个分钟点，昨收 {pre}")
+            print(f"  {name} 分时({'腾讯' if minute_date is None else '东经CF'}): "
+                  f"{len(pts)} 个分钟点，昨收 {pre}")
         else:
             print(f"  [警告] {name} 分时获取失败: {last_err}")
         time.sleep(0.3)

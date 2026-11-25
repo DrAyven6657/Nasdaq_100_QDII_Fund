@@ -672,11 +672,12 @@ document.querySelectorAll('.chart-block').forEach(block => {
     // 纳指100 分时用东财 105.QQQ（Invesco 纳指100 旗舰 ETF）：真实纳指100 指数的分钟级
     // 免费源不存在（新浪无美股分时、腾讯美股只回单点、东财 100.NDX100 死）。QQQ 与指数
     // 当日走势高度一致，迷你线不展示数值；红绿仍按纳指100 自己的昨收/现价计算。
-    // 东财分时经 CF 间歇性 520：页面每 60 秒轮询自动补帧，失败保留上一帧。
+    // A 股分时主源=腾讯分钟线（经 Worker /tminute，实测最稳），东财 trends2 经 CF 兜底；
+    // 东财通道间歇性 520：页面每 60 秒轮询自动补帧，失败保留上一帧。
     { code: 'gb_ndx',   secid: '105.QQQ',    us: 1, priceId: 'price-ndx', changeId: 'change-ndx', sparkId: 'spark-ndx' },   // 纳斯达克100
     { code: 'gb_inx',   secid: '100.SPX',    us: 1, livePre: 1, priceId: 'price-spx', changeId: 'change-spx', sparkId: 'spark-spx' },   // 标普500
-    { code: 'sh000001', secid: '1.000001',   us: 0, livePre: 1, priceId: 'price-sh',  changeId: 'change-sh',  sparkId: 'spark-sh' },    // 上证指数
-    { code: 'sz399006', secid: '0.399006',   us: 0, livePre: 1, priceId: 'price-cyb', changeId: 'change-cyb', sparkId: 'spark-cyb' },    // 创业板指
+    { code: 'sh000001', secid: '1.000001',   us: 0, livePre: 1, tcode: 'sh000001', priceId: 'price-sh',  changeId: 'change-sh',  sparkId: 'spark-sh' },    // 上证指数
+    { code: 'sz399006', secid: '0.399006',   us: 0, livePre: 1, tcode: 'sz399006', priceId: 'price-cyb', changeId: 'change-cyb', sparkId: 'spark-cyb' },    // 创业板指
   ];
   // 新浪美股 gb_ 字段：0名称 1最新价 2涨跌幅% 3报价时间(北京) 4涨跌额 5开 6高 7低
   // 新浪A股字段：0名称 1今开 2昨收 3最新价 … 30日期 31时间(北京)
@@ -826,20 +827,44 @@ document.querySelectorAll('.chart-block').forEach(block => {
   pull();                    // 进页面先拉一次：休市也能把最新收盘价点亮到卡片
   window.__rtPull = pull;    // 调试钩子：控制台输入 __rtPull() 可手动触发
 
+  // 分时取数降级链：腾讯（/tminute，A 股主源、实测最稳）→ 东财（/trends，兜底）。
+  // Worker 未部署 /tminute（404）或其上游闪断时自动落到下一级，无需任何配置。
+  function fetchTrends(m) {
+    const urls = [];
+    if (m.tcode) urls.push(RT_PROXY + 'tminute?code=' + m.tcode);
+    urls.push(RT_PROXY + 'trends?secid=' + m.secid);
+    return urls.reduce((chain, u) => chain.catch(() =>
+      fetch(u, { cache: 'no-store' }).then(r => { if (!r.ok) throw 0; return r.json(); })
+    ), Promise.reject());
+  }
+  // 兼容两种返回形态：东财 trends2 的 data.trends=[“日期 时间,价,…”]、
+  // 腾讯 minute/query 的 data[代码].data.data=[“0930 价 量 额”,…]
+  function parseTrends(j, m) {
+    const d = (j && j.data) || {};
+    const out = [];
+    if (Array.isArray(d.trends)) {
+      d.trends.forEach(row => {
+        const v = parseFloat(String(row).split(',')[1]);
+        if (isFinite(v)) out.push(v);
+      });
+    } else if (m.tcode && d[m.tcode]) {
+      let rows = (d[m.tcode].data || {}).data;
+      if (typeof rows === 'string') rows = rows.split(';');
+      (rows || []).forEach(row => {
+        const v = parseFloat(String(row).trim().split(/\s+/)[1]);
+        if (isFinite(v)) out.push(v);
+      });
+    }
+    return out;
+  }
   // 分时迷你线：每 60 秒按各自市场开盘状态增量刷新（报价接口只有快照，分时序列走 Worker /trends）
   function minutePull(m, once) {
     const open = m.us ? usOpen() : cnOpen();
     // 开市逐分钟补帧；收市仅进页面时补拉一次（拿到比静态底图更完整的全天序列才采用），此后保持画面
     if (!open) { if (!once || m._closed) return; m._closed = 1; }
-    fetch(RT_PROXY + 'trends?secid=' + m.secid, { cache: 'no-store' })
-      .then(r => r.json())
+    fetchTrends(m)
       .then(j => {
-        const d = (j && j.data) || {};
-        const pts = [];
-        (d.trends || []).forEach(row => {
-          const v = parseFloat(row.split(',')[1]);
-          if (isFinite(v)) pts.push(v);
-        });
+        const pts = parseTrends(j, m);
         // 昨收基准读 applyData 预存的同量纲预计算值（__SPARK_PRE；当日恒定，不作盘中更新）
         let ref = (window.__SPARK_PRE || {})[m.sparkId];
         const curLen = (window.__SPARK_LEN || {})[m.sparkId] || 0;
