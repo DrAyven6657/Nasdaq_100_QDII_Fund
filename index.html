@@ -641,7 +641,11 @@ function drawSpark(elId, points, ref, us) {
   const py = v => H - P - (v - lo) * (H - 2 * P) / span;
   const d = points.map((v, i) => (i ? 'L' : 'M') + px(i).toFixed(2) + ',' + py(v).toFixed(2)).join('');
   const last = points[points.length - 1];
-  const up = last >= (refv !== null ? refv : points[0]);
+  // 红绿判定：优先用报价涨跌额的符号（applyData / paintQuote 写入 __SPARK_UP，与价格栏
+  // 同源同笔）——烤库偶发缺昨收基准也绝不串色；没有该记号时退回老判断（末点 vs 昨收，
+  // 再退与首点比）：所谓「现价 vs 昨收」本就是涨跌额的正负，只是它的来源更可靠
+  let up = (window.__SPARK_UP || {})[elId];
+  if (up === undefined) up = last >= (refv !== null ? refv : points[0]);
   const color = up ? '#dc2626' : '#16a34a';
   const gid = 'sg-' + elId;
   let html = `<defs><linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1">` +
@@ -711,6 +715,10 @@ function applyData(d) {
     const ref = (m && m.pre != null) ? m.pre
       : (fb && q && q.price != null && q.change != null ? q.price - q.change : null);
     if (ref != null) window.__SPARK_PRE[id] = ref;
+    // 分时线红绿：与价格栏同源的涨跌额符号（applyData 烤库首帧先记一次，
+    // 之后每 5 秒由实时报价 paintQuote 刷新）——昨收基准只管虚线，不再影响红绿
+    window.__SPARK_UP = window.__SPARK_UP || {};
+    if (q && q.change != null) window.__SPARK_UP[id] = q.change >= 0;
     drawSpark(id, m && m.pts, ref, slots);
     window.__SPARK_LEN[id] = (m && m.pts || []).length;
     if (m && m.pts) window.__SPARK_PTS[id] = m.pts;
@@ -1019,6 +1027,8 @@ document.querySelectorAll('.chart-block').forEach(block => {
     const changeEl = document.getElementById(m.changeId);
     if (!priceEl || !changeEl) return;
     const cls = pct > 0 ? 'up' : (pct < 0 ? 'down' : 'flat');
+    // 分时线红绿记号：以报价涨跌额符号为准（与价格栏同源同笔），画线 drawSpark 读取
+    (window.__SPARK_UP = window.__SPARK_UP || {})[m.sparkId] = chg >= 0;
     priceEl.textContent = price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     priceEl.className = 'quote-price';        // 点数固定黑色，不随涨跌变色
     changeEl.textContent = (chg > 0 ? '+' : '') + chg.toFixed(2) + '　' + (pct > 0 ? '+' : '') + pct.toFixed(2) + '%';
