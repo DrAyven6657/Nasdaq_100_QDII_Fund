@@ -2,9 +2,10 @@
 
 一个**零成本、无需服务器**的静态网页：监控纳斯达克100 / 标普500 / 纳指科技 QDII 基金（场外 A 类）的申购状态与限购额度，内置八张实时行情卡（按地区分组：美国＝纳指100 / 标普500，中国＝上证指数 / 创业板指 / 恒生科技 / 黄金Au99.99，亚太＝韩国综合 / 日经225）配同花顺式分时图、三十年级别的指数日 K 复盘与历史定投回测。浅色简洁界面，每日定时自动更新，数据抓取纯 Python 标准库实现。
 
-> 🌐 **在线访问（GitHub Pages）：[https://drayven6657.github.io/Nasdaq_100_QDII_Fund/](https://drayven6657.github.io/Nasdaq_100_QDII_Fund/)**
+> 🌐 **在线访问：[https://www.chitong-indextracking.xyz/](https://www.chitong-indextracking.xyz/)**
+>（同站备用：[https://nasdaq-100-qdii-fund.pages.dev/](https://nasdaq-100-qdii-fund.pages.dev/)）
 >
-> 无需安装任何东西，打开即用。数据由 GitHub Actions 每日定时抓取提交，页面永远展示最新结果。
+> 无需安装任何东西，打开即用。数据由 GitHub Actions 每日定时抓取提交、Cloudflare Pages 自动重新发布，页面永远展示最新结果。
 
 ---
 
@@ -40,7 +41,7 @@
 
 | 角色 | 载体 | 职责 |
 |---|---|---|
-| 前端托管 | GitHub Pages | 页面、样式、图表渲染全部在访客浏览器本地完成 |
+| 前端托管 | Cloudflare Pages（发布 public/ 目录、绑定自有域名） | 页面、样式、图表渲染全部在访客浏览器本地完成 |
 | 实时代理 | Cloudflare Worker（Serverless 函数） | 唯一在服务器上运行的代码：绕过跨域限制代取新浪/东财行情，无状态、无数据库、纯转发 |
 | 定时抓取 | GitHub Actions | 每天北京时间 06:00 / 16:00 自动运行抓取脚本，把新数据提交进仓库 |
 | 手动入口 | 本机 `启动.bat` / `scrape.py` | 随时双击立即更新一次数据并打开页面 |
@@ -53,7 +54,7 @@ Worker 供五条路由：根路由转发新浪实时行情（GBK 原样返回 + 
 
 ### 方式一：在线版（推荐）
 
-直接打开 **[https://drayven6657.github.io/Nasdaq_100_QDII_Fund/](https://drayven6657.github.io/Nasdaq_100_QDII_Fund/)**，什么都不用装。
+直接打开 **[https://www.chitong-indextracking.xyz/](https://www.chitong-indextracking.xyz/)**，什么都不用装。
 
 ### 方式二：本地使用（Windows）
 
@@ -62,21 +63,23 @@ Worker 供五条路由：根路由转发新浪实时行情（GBK 原样返回 + 
 或者手动运行：
 
 ```bash
-python scrape.py      # 抓取数据，生成 data.json / data.js / kline_data.js
+python scrape.py      # 抓取数据，生成 public/ 下的 data.json / data.js / kline_data.js
 ```
 
-然后用浏览器打开 `index.html` 即可。数据与 ECharts 库均通过本地 `<script>` 方式加载，`file://` 协议下也能正常显示，无需本地 HTTP 服务，也不依赖任何网络 CDN。
+然后用浏览器打开 `public/index.html` 即可。数据与 ECharts 库均通过本地 `<script>` 方式加载，`file://` 协议下也能正常显示，无需本地 HTTP 服务，也不依赖任何网络 CDN。
 
-### 方式三：部署到自己的 GitHub Pages
+### 方式三：部署自己的站点（本仓库现行方案）
 
-把仓库 Fork 后开启 GitHub Actions 与 GitHub Pages 即可：Actions 每天定时抓取并提交数据，GitHub Pages 同步展示最新页面。
+把仓库接入 **Cloudflare Pages**（连接 Git → 构建命令留空 → 构建输出目录填 `public` → 绑定自定义域名）：
+之后每次提交——包括 Actions 的烤数提交——都会自动重新发布。换任何别的静态托管平台同理：
+`public/` 目录本身就是完整站点根目录，抓取脚本会把数据持续写进这里。
 
 ## ⏰ 每日定时自动更新（基金净值 / 指数行情）
 
 `.github/workflows/update.yml` 在每天**北京时间 06:00**（美股收盘后，当日完整日 K 已出）与 **16:00**（A 股收盘后，当日净值更新）各触发一次：
 
 1. 运行 `python scrape.py` 抓取全部 22 只基金的净值 / 申购状态 / 限购额度 + 三大指数日 K 与八张行情卡的实时快照与分时；
-2. 将更新后的 `data.json / data.js / kline_data.js` 提交进仓库，GitHub Pages 随之展示最新数据。
+2. 将 public/ 下的三个数据文件提交进仓库，Cloudflare Pages 随之自动重新发布最新数据。
 
 > GitHub 的定时任务为「尽力而为」：整点高峰期可能延迟数小时、极少数情况下被丢弃，属正常现象，数据在下一次触发时自动补齐。
 
@@ -85,18 +88,19 @@ python scrape.py      # 抓取数据，生成 data.json / data.js / kline_data.j
 ```
 ├── 启动.bat                       # Windows 双击即用：更新数据 + 打开页面
 ├── scrape.py                      # 核心抓取脚本（Python 标准库，无第三方依赖）
-├── index.html                     # 主页面（额度表 + 行情卡 + 日K线）
-├── kline.html                     # 独立的指数日K线页面
-├── dca.html                       # 定投模拟页（历史净值回测，访问时按需加载净值数据）
-├── kline_echarts.js               # 日K线渲染模块（index.html / kline.html 共用，ECharts）
-├── echarts.min.js                 # Apache ECharts 5 本地库（随仓库分发，无外链）
 ├── kline_data.py                  # 更新指数日K + 定投用场外基金复权净值：含纳指100 历史拼接（每日自动调用，也可单独运行）
-├── data.json                      # 每日生成的基金数据（可读副本）
-├── data.js                        # 每日生成的基金数据（网页实际加载，file:// 也能打开）
-├── kline_data.js                  # 每日生成的指数日K数据（紧凑数组格式；纳指100 为拼接后序列，附接缝元信息）
-├── kline_prefix.json              # 纳指100 拼接前缀缓存（本地构建用，不上传）
-├── kline_data_pages_backup.js     # 上一版日K数据的兜底副本（本地构建用，不上传）
-└── .github/workflows/update.yml   # 每日定时更新（北京时间 06:00 / 16:00 各一次）
+├── kline_prefix.json              # 纳指100 拼接前缀缓存（本地构建用，不上线）
+├── kline_data_pages_backup.js     # 上一版日K数据的兜底副本（本地构建用，不上线）
+├── .github/workflows/update.yml   # 每日定时更新（北京时间 06:00 / 16:00 各一次）
+└── public/                        # 网站文件夹 —— Cloudflare Pages 直接发布这一整个目录
+    ├── index.html                 # 主页面（额度表 + 行情卡 + 日K线）
+    ├── kline.html                 # 独立的指数日K线页面
+    ├── dca.html                   # 定投模拟页（历史净值回测，访问时按需加载净值数据）
+    ├── kline_echarts.js           # 日K线渲染模块（index.html / kline.html 共用，ECharts）
+    ├── echarts.min.js             # Apache ECharts 5 本地库（随仓库分发，无外链）
+    ├── data.json                  # 每日生成的基金数据（可读副本）
+    ├── data.js                    # 每日生成的基金数据（网页实际加载，file:// 也能打开）
+    └── kline_data.js              # 每日生成的指数日K数据（紧凑数组格式；纳指100 为拼接后序列，附接缝元信息）
 ```
 
 ## 📊 数据来源（均免费、无需登录）
@@ -129,7 +133,7 @@ python scrape.py      # 抓取数据，生成 data.json / data.js / kline_data.j
 
 ## 🛠 技术实现要点
 
-- **纯静态零依赖**：前端原生 HTML + CSS + JavaScript；图表使用 Apache ECharts 5（Apache-2.0 协议），已内置为仓库内 `echarts.min.js`，离线可用、不依赖 CDN，`file://` 直开与 GitHub Pages 均适用。
+- **纯静态零依赖**：前端原生 HTML + CSS + JavaScript；图表使用 Apache ECharts 5（Apache-2.0 协议），已内置为仓库内 `echarts.min.js`，离线可用、不依赖 CDN，`file://` 直开与线上托管均适用。
 - **图表库秒开缓存**：`echarts.min.js`（约 1MB）首次加载后由页面脚本存入访客 `localStorage`（缓存键随版本号，如 `echarts.cache.5.5.1`），次日及以后直接本地注入、不再发起网络请求；升级库版本时改缓存键即自动失效，隐私模式等不支持 localStorage 的环境自动回退正常加载（缓存逻辑内置于三个页面，无独立脚本文件）。
 - **双频轮询与开市判定**：页面打开后由实时插件按市场接管——任一市场开市时段每 5 秒拉一次报价、每 60 秒补一次分时；全部收市（六个市场中包括韩股 / 日股在内任何一个都不开市；周末、A 股/港股午休、金交所日盘夜盘间隙等都算收市）自动停止轮询并显示「收盘」角标；页头「北京时间」走表每秒刷新、与轮询无关（收市也走）；美东时段判定内置夏令时换算（`Intl` 时区偏移反解，无手工开关）。
 - **K 线数据瘦身**：`kline_data.js` 中的行情行采用 `[日期, 开, 收, 高, 低, 量]` 紧凑数组格式（较对象格式体积减少约 30%），前端读取时归一化并按指数缓存；旧版对象格式仍可被识别，保证缓存与备份互相兼容。
