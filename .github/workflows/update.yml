@@ -29,7 +29,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add data.json data.js kline_data.js
+          git add public
           if git diff --cached --quiet; then
             echo "数据无变化，跳过提交"
           else
