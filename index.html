@@ -868,6 +868,48 @@ document.querySelectorAll('.chart-block').forEach(block => {
       : m.mkt === 'kr' ? krOpen() : m.mkt === 'jp' ? jpOpen() : cnOpen();
   }
   function mktSlots(m) { return m.mkt === 'us' ? 390 : m.mkt === 'hk' ? 330 : m.mkt === 'au' ? 780 : m.mkt === 'kr' ? 390 : m.mkt === 'jp' ? 330 : 240; }
+  // 「今日当前交易时段已经走了多少分钟」——开盘换日检测的分母。东财换日有滞后：刚
+  // 开盘时常还端着上一交易日的全天序列；烤库分时同样是抓取那天的全天线。序列点数
+  // 远超这个值（+10 容余，含港美股集合竞价多出的几行）时，这条线必是旧日线，
+  // 今日盘中不能拿它顶当天的线。按市场分段累计（A股/港股跳过午休、黄金跨零点）。
+  function sessionElapsedMin(m) {
+    const tzMin = tz => {
+      const d = new Date(new Date().toLocaleString('en-US', { timeZone: tz }));
+      return d.getHours() * 60 + d.getMinutes();
+    };
+    let t;
+    switch (m.mkt) {
+      case 'us': t = tzMin('America/New_York'); return Math.min(Math.max(t - 570, 0), 390);
+      case 'hk': t = tzMin('Asia/Hong_Kong');
+        return t >= 570 && t < 720 ? t - 570 : t >= 780 && t < 960 ? 150 + t - 780 : 330;
+      case 'kr': t = tzMin('Asia/Seoul'); return Math.min(Math.max(t - 540, 0), 390);
+      case 'jp': t = tzMin('Asia/Tokyo');
+        return t >= 540 && t < 690 ? t - 540 : t >= 750 && t < 930 ? 150 + t - 750 : 330;
+      case 'au':   // 黄金：今天这条线从昨夜 20:00 起算（夜盘跨零点），日盘按墙钟（东财含午休行）
+        t = tzMin('Asia/Shanghai');
+        if (t >= 540 && t < 930) return 390 + t - 540;
+        if (t >= 1200) return t - 1200;
+        if (t < 150) return 240 + t;
+        return -1;
+      default:     // A 股（东财序列不含午休行）
+        t = tzMin('Asia/Shanghai');
+        if (t >= 570 && t < 690) return t - 570;
+        if (t >= 780 && t < 900) return 120 + t - 780;
+        return -1;
+    }
+  }
+  // 开盘换日体检：把「点数远超今日时段已走分钟」的上一交易日线清掉——今天的分时
+  // 从最左侧第一根分钟重新起画。收市时不调用（那时上一交易日的全天线正是该显示的）。
+  function clearStaleBaked(m) {
+    if (!mktOpen(m)) return;
+    const pts = (window.__SPARK_PTS || {})[m.sparkId];
+    const avail = sessionElapsedMin(m);
+    if (pts && avail >= 0 && pts.length > avail + 10) {
+      drawSpark(m.sparkId, null);
+      window.__SPARK_PTS[m.sparkId] = null;
+      window.__SPARK_LEN[m.sparkId] = 0;
+    }
+  }
 
   // 徽标时间口径：状态词区分开市/收市，时间一律显示当前实际时刻（Intl 按北京时间，
   // 跨时区访客看到同一时刻）；美股卡右侧另有当前对应的纽约时间。收市后报价轮询停止，
@@ -1031,11 +1073,17 @@ document.querySelectorAll('.chart-block').forEach(block => {
     urls.push(RT_PROXY + 'trends?secid=' + m.secid);
     urls.push('https://push2his.eastmoney.com/api/qt/stock/trends2/get?secid=' + m.secid +
       '&fields1=f1,f2,f3,f7,f8&fields2=f51,f53,f56,f58&ndays=1&iscr=0');
+    // 韩日末位兜底：push2delay 的 1 分钟 K 线与分时是两个存储，东财分时换日滞后时它
+    // 开盘即有今天的柱子（2026-11-26 实测）。只用给 tq 市场——美股卡的 secid 是 ETF
+    //（105.QQQ），量纲与指数不同，不能混进这条链。
+    if (m.tq) urls.push('https://push2delay.eastmoney.com/api/qt/stock/kline/get?secid=' + m.secid +
+      '&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f53&klt=1&fqt=0&end=20500101&lmt=500');
     // 关键：东财「半故障期」会返回 200 + 空数据（data.trends 缺失或空数组），若把空应答当
     // 成功，链条会停在这儿、永远不落到直连兜底——必须把「解析后不足 2 个点」也当失败传下去
     const count = j => {
       const d = (j && j.data) || {};
       if (Array.isArray(d.trends)) return d.trends.length;
+      if (Array.isArray(d.klines)) return d.klines.length;
       let rows = m.tcode && d[m.tcode] && d[m.tcode].data && d[m.tcode].data.data;
       rows = typeof rows === 'string' ? rows.split(';') : (Array.isArray(rows) ? rows : []);
       return rows.length;
@@ -1045,13 +1093,19 @@ document.querySelectorAll('.chart-block').forEach(block => {
         .then(j => { if (count(j) < 2) throw 0; return j; })
     ), Promise.reject());
   }
-  // 兼容两种返回形态：东财 trends2 的 data.trends=[“日期 时间,价,…”]、
+  // 兼容三种返回形态：东财 trends2 的 data.trends=[“日期 时间,价,…”]、东财 kline 的
+  // data.klines=[“日期 时间,收盘价,…”]（/trends 与 kline 行的取值列同为第 2 列）、
   // 腾讯 minute/query 的 data[代码].data.data=[“0930 价 量 额”,…]
   function parseTrends(j, m) {
     const d = (j && j.data) || {};
     const out = [];
     if (Array.isArray(d.trends)) {
       d.trends.forEach(row => {
+        const v = parseFloat(String(row).split(',')[1]);
+        if (isFinite(v)) out.push(v);
+      });
+    } else if (Array.isArray(d.klines)) {
+      d.klines.forEach(row => {
         const v = parseFloat(String(row).split(',')[1]);
         if (isFinite(v)) out.push(v);
       });
@@ -1078,6 +1132,37 @@ document.querySelectorAll('.chart-block').forEach(block => {
       paintQuote(m, lp, lp - ref, (lp - ref) / ref * 100);
     }
   }
+  // 韩日快照行情：这两张卡没有实时快照源（腾讯无码、新浪 int_ 家族冻结），此前价格
+  // 只能跟随分时末点——而东财分时对日经的换日常迟一个多小时（2026-11-26 实测：东京
+  // 开盘 1.5 小时后 trends2 仍端着前一日全天线），早盘价格整个挂着昨天的收盘。
+  // 改轮询东财「实时快照」ulist.np（与分时不同管线，开盘即新）：Worker /quote 优先，
+  // 访客浏览器直连兜底（该接口带 CORS 放行，f18 即昨收）。收市不拉（收盘态由
+  // paintTqFromBaked 用烤库分时末点上卡）。
+  function pollTqQuotes() {
+    const ls = MAP.filter(m => m.tq && mktOpen(m));
+    if (!ls.length) return;
+    const qs = encodeURIComponent(ls.map(m => m.secid).join(','));
+    const paint = j => {
+      const diff = ((j && j.data) || {}).diff || [];
+      ls.forEach(m => {
+        const it = diff.find(x => m.secid.endsWith(String(x.f12 || '%')));
+        if (!it || !isFinite(it.f2) || !isFinite(it.f18) || !it.f18) return;
+        const chg = isFinite(it.f4) ? Number(it.f4) : it.f2 - it.f18;
+        const pct = isFinite(it.f3) ? Number(it.f3) : chg / it.f18 * 100;
+        paintQuote(m, it.f2, chg, pct);
+        m.__snapPre = it.f18;          // 供分时画线虚线基准 & tq 兜底画法取正确昨收
+        m.__snapAt = Date.now();
+      });
+    };
+    fetch(RT_PROXY + 'quote?secids=' + qs, { cache: 'no-store' })
+      .then(r => { if (!r.ok) throw 0; return r.json(); })
+      .then(paint)
+      .catch(() => fetch('https://push2.eastmoney.com/api/qt/ulist.np/get?fltt=2&np=1&secids=' + qs +
+          '&fields=f2,f3,f4,f12,f14,f18', { cache: 'no-store' })
+        .then(r => { if (!r.ok) throw 0; return r.json(); })
+        .then(paint)
+        .catch(() => {}));
+  }
   function minutePull(m, once) {
     const open = mktOpen(m);
     paintTqFromBaked(m);
@@ -1086,8 +1171,14 @@ document.querySelectorAll('.chart-block').forEach(block => {
     fetchTrends(m)
       .then(j => {
         const pts = parseTrends(j, m);
-        // 昨收基准读 applyData 预存的同量纲预计算值（__SPARK_PRE；当日恒定，不作盘中更新）
-        let ref = (window.__SPARK_PRE || {})[m.sparkId];
+        // 开盘换日体检：东财换日有滞后，刚开盘可能仍返回上一交易日的全天序列——
+        // 点数远超今日时段已走分钟即判旧线，弃用，等今天的点从最左侧起画
+        const avail = sessionElapsedMin(m);
+        if (open && avail >= 0 && pts.length > avail + 10) return;
+        // 画线基准（虚线）：韩日快照刚更新过时用快照带回的昨收——东财分时换日
+        // 滞后期间，烤库/分时自带的昨收是上一交易日的，位置会画错
+        let ref = (m.__snapPre && m.__snapAt && Date.now() - m.__snapAt < 150000)
+          ? m.__snapPre : (window.__SPARK_PRE || {})[m.sparkId];
         const curLen = (window.__SPARK_LEN || {})[m.sparkId] || 0;
         // 量纲体检：昨收必须落在曲线自身的合理邻域内，否则说明基准与曲线不同量纲
         //（如烤库丢分时、曲线走了另一条数据源），弃用基准、照常画线（无虚线），
@@ -1104,9 +1195,9 @@ document.querySelectorAll('.chart-block').forEach(block => {
             window.__SPARK_LEN[m.sparkId] = pts.length;
             window.__SPARK_PTS[m.sparkId] = pts;
           }
-          // tq 指数（日经225/韩国综合）无快照源：末点=现价、画线基准=昨收，
-          // 随分时轮询顺带上卡片（收市也要点亮当日收盘价与「收盘」角标）
-          if (m.tq && isFinite(ref)) {
+          // tq 指数（日经225/韩国综合）：快照通道每分钟都在刷价格数字，这里只在快照
+          // 没接通时才用分时末点上卡——否则两条通道值有秒级差异，数字会来回跳
+          if (m.tq && !(m.__snapAt && Date.now() - m.__snapAt < 150000) && isFinite(ref)) {
             const lp = pts[pts.length - 1];
             paintQuote(m, lp, lp - ref, (lp - ref) / ref * 100);
           }
@@ -1114,9 +1205,17 @@ document.querySelectorAll('.chart-block').forEach(block => {
       })
       .catch(() => {});
   }
-  setInterval(() => { if (Date.now() >= restUntil) MAP.forEach(minutePull); }, 60000);
+  setInterval(() => {
+    if (Date.now() < restUntil) return;
+    MAP.forEach(clearStaleBaked);   // 先做开盘换日体检（盘中跨过开盘时刻也能及时换线），再补帧
+    pollTqQuotes();                 // 韩日价格不等分时翻日（日经换日常迟一个多小时）
+    MAP.forEach(minutePull);
+  }, 60000);
+  MAP.forEach(clearStaleBaked);          // 进页面先体检一次：清掉上一交易日的烤库全天线
   MAP.forEach(m => minutePull(m, 1));   // 进页面立即对齐一次；收市也补拉一次完整分时（仅此一次）
+  pollTqQuotes();                        // 进页面立即修一次韩日价格（烤库值可能是上一交易日的）
   window.__rtMinute = once => MAP.forEach(m => minutePull(m, once));   // 调试钩子
+  window.__sessElapsed = () => MAP.map(m => [m.sparkId, mktOpen(m), sessionElapsedMin(m)]);   // 调试钩子
 })();
 </script>
 </body>
