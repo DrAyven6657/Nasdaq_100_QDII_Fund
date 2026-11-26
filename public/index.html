@@ -1,0 +1,1260 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#f5f6f8">
+<title>行情监控 · 场外额度监控</title>
+<style>
+  :root {
+    color-scheme: light;
+    --bg: #f5f6f8; --card: #ffffff; --card-2: #f3f5f8;
+    --border: #e5e7eb; --border-soft: #f1f2f4; --text: #1f2937;
+    --muted: #6b7280; --up: #dc2626; --down: #16a34a;
+    --idx100: #2563eb; --idx500: #ea580c; --idxtech: #7c3aed; --idxsse: #0d9488; --idxcyb: #f59e0b;
+    --idxhk: #db2777; --idxau: #ca8a04; --idxkr: #7c3aed; --idxjp: #0284c7;
+    --accent: #1d4ed8; --accent-soft: #3b82f6;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scrollbar-color: #cbd5e1 transparent; }
+  body {
+    font-family: -apple-system, "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif;
+    background: var(--bg); color: var(--text); line-height: 1.5; padding: 24px 16px 60px;
+  }
+  .container { max-width: 1200px; margin: 0 auto; }
+  header { margin-bottom: 16px; display: flex; align-items: flex-end; justify-content: space-between;
+    gap: 14px; flex-wrap: wrap; }
+  header h1 { font-size: 22px; font-weight: 700; }
+  header .sub { color: var(--muted); font-size: 13px; margin-top: 4px; }
+  /* 页头「北京时间」走表：全站唯一显眼的时刻显示（秒级跳动，收市也走） */
+  .bj-clock { background: #0f172a; color: #fff; border-radius: 10px; padding: 6px 14px;
+    display: inline-flex; align-items: baseline; gap: 8px; box-shadow: 0 2px 8px rgba(15,23,42,.2);
+    flex: none; }
+  .bj-clock .lab { font-size: 11px; color: #94a3b8; font-weight: 600; align-self: center; }
+  .bj-clock .tm { font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums;
+    letter-spacing: .5px; line-height: 1; }
+  .bj-clock .sc { font-size: 13px; color: #34d399; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .note {
+    background: #fff7ed; border: 1px solid #fed7aa; color: #9a3412;
+    border-radius: 8px; padding: 10px 14px; font-size: 12.5px; margin: 12px 0;
+  }
+  .toolbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 14px 0; }
+  .toolbar .grp { display: inline-flex; gap: 6px; align-items: center; }
+  .toolbar .lbl { font-size: 12px; color: var(--muted); margin-right: 2px; }
+  .toolbar button {
+    border: 1px solid var(--border); background: var(--card); color: var(--text);
+    padding: 5px 13px; border-radius: 16px; cursor: pointer; font-size: 13px; transition: all .15s;
+  }
+  .toolbar button:hover { border-color: var(--accent); color: var(--accent-soft); }
+  .toolbar button.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+  a:focus-visible, button:focus-visible { outline: 2px solid var(--accent-soft); outline-offset: 2px; }
+  .meta { color: var(--muted); font-size: 12.5px; margin-left: auto; }
+  .table-wrap { background: var(--card); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; font-variant-numeric: tabular-nums; }
+  thead th {
+    position: sticky; top: 0; background: #fafbfc; color: var(--muted);
+    text-align: right; font-weight: 600; padding: 11px 12px; white-space: nowrap;
+    border-bottom: 1px solid var(--border); cursor: pointer; user-select: none; z-index: 1;
+  }
+  thead th:hover { color: var(--accent-soft); }
+  thead th.left, td.left { text-align: left; }
+  thead th.no-sort { cursor: default; }
+  tbody td { padding: 10px 12px; text-align: right; white-space: nowrap; border-bottom: 1px solid var(--border-soft); }
+  tbody tr:hover { background: var(--card-2); }
+  /* 分组标题行 */
+  tr.group-row td {
+    background: #eef2ff; text-align: left; font-weight: 700; color: #3730a3;
+    padding: 8px 12px; border-bottom: 1px solid #dbeafe; font-size: 13.5px; cursor: default;
+  }
+  tr.group-row.otc td { background: #ecfdf5; color: #065f46; border-bottom: 1px solid #a7f3d0; }
+  tr.group-row td:hover { background: inherit; }
+  .code { font-family: ui-monospace, "SF Mono", Consolas, monospace; color: var(--muted); }
+  .name { font-weight: 600; text-align: left !important; }
+  .tag { display: inline-block; font-size: 11px; padding: 1px 7px; border-radius: 4px; font-weight: 600; }
+  .tag.idx100 { background: rgba(37,99,235,.09); color: #1d4ed8; border: 1px solid rgba(37,99,235,.28); }
+  .tag.idx500 { background: rgba(234,88,12,.09); color: #c2410c; border: 1px solid rgba(234,88,12,.28); }
+  .tag.idxtech { background: rgba(124,58,237,.09); color: #6d28d9; border: 1px solid rgba(124,58,237,.28); }
+  .premium { font-weight: 700; } .premium.pos { color: var(--up); } .premium.neg { color: var(--down); }
+  .limit { color: var(--up); font-weight: 600; }
+  .status-pause { color: var(--up); font-weight: 600; }
+  .status-open { color: var(--down); font-weight: 600; }
+  /* 近1年收益率 进度条 */
+  .ret-bar-wrap { position: relative; height: 22px; border-radius: 5px; overflow: hidden; background: #f3f4f6; min-width: 90px; }
+  .ret-bar-fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 5px;
+    background: linear-gradient(90deg, #fde6e6 0%, #f9b4b4 50%, #ef4444 100%); }
+  .ret-bar-fill.neg { background: linear-gradient(90deg, #e2f5e6 0%, #9fe0ab 50%, #16a34a 100%); }
+  .ret-bar-text { position: relative; z-index: 1; line-height: 22px; padding: 0 8px;
+    font-weight: 700; font-size: 12.5px; color: #111827; font-variant-numeric: tabular-nums; text-align: right; }
+  .muted { color: var(--muted); }
+  .sort-ind { color: var(--accent-soft); font-size: 11px; }
+  footer { text-align: center; color: var(--muted); font-size: 12px; margin-top: 20px; }
+  /* 指数行情卡片 */
+  .quotes { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin: 14px 0; }
+  /* 分组标签：横跨整行的地区大标（美国 / 中国 / 亚太），组名随地区着色 */
+  .zone-head { grid-column: 1 / -1; display: flex; align-items: center; gap: 9px;
+    font-size: 16px; font-weight: 800; letter-spacing: 4px; margin-top: 6px; }
+  .zone-head i { width: 5px; height: 17px; border-radius: 3px; flex: none; }
+  .zone-head::after { content: ""; flex: 1; height: 2px; border-radius: 1px; opacity: .5; }
+  .zone-head.zone-us { color: #2563eb; }
+  .zone-head.zone-us i { background: #2563eb; }
+  .zone-head.zone-us::after { background: #2563eb; }
+  .zone-head.zone-cn { color: #dc2626; }
+  .zone-head.zone-cn i { background: #dc2626; }
+  .zone-head.zone-cn::after { background: #dc2626; }
+  .zone-head.zone-ap { color: #0d9488; }
+  .zone-head.zone-ap i { background: #0d9488; }
+  .zone-head.zone-ap::after { background: #0d9488; }
+  .quote-card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 14px 18px;
+    display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+  .quote-main { min-width: 0; }
+  .spark { width: 100%; height: 72px; flex: none; }
+  .quote-chart { flex: none; width: 288px; display: flex; flex-direction: column; }
+  .spark-axis { display: flex; justify-content: space-between; font-size: 9px; color: var(--muted);
+    line-height: 1; margin-top: 3px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .quote-name { font-size: 13px; color: var(--muted); font-weight: 600; margin-bottom: 4px; display: flex; align-items: center; gap: 7px; }
+  .quote-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; flex: none; }
+  .quote-dot.ndx { background: var(--idx100); }
+  .quote-dot.spx { background: var(--idx500); }
+  .quote-dot.sse { background: var(--idxsse); }
+  .quote-dot.cyb { background: var(--idxcyb); }
+.quote-dot.hst { background: var(--idxhk); }
+.quote-dot.au { background: var(--idxau); }
+.quote-dot.kr { background: var(--idxkr); }
+.quote-dot.jp { background: var(--idxjp); }
+  .quote-price { font-size: 30px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.15; color: #111827; }
+  .quote-change { font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; margin-top: 3px; }
+  .quote-change.up { color: var(--up); }
+  .quote-change.down { color: var(--down); }
+  .quote-change.flat { color: var(--muted); }
+  /* 指数日K线 */
+  .kline-title { font-size: 15px; font-weight: 700; margin: 18px 0 10px; }
+  .kline-note { font-size: 12px; font-weight: 400; color: var(--muted); margin-left: 8px; }
+  .kline-tabs { display: inline-flex; gap: 6px; margin-bottom: 12px; }
+  .kline-tabs button { border: 1px solid var(--border); background: var(--card); color: var(--muted);
+    padding: 6px 16px; border-radius: 16px; cursor: pointer; font-size: 13px; transition: all .15s; }
+  .kline-tabs button:hover { border-color: var(--accent); color: var(--accent-soft); }
+  .kline-tabs button.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .chart-sub { font-size: 12px; color: var(--muted); margin: 2px 0 6px; font-variant-numeric: tabular-nums; }
+  .chart-sub b { color: var(--text); font-weight: 600; }
+  .chart-block { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px 8px; margin-bottom: 16px; }
+  .chart-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px 16px; margin-bottom: 6px; }
+  .chart-title { font-size: 15px; font-weight: 700; }
+  .chart-price { font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .chart-price.up { color: var(--up); } .chart-price.down { color: var(--down); }
+  .chart-chg { font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .chart-chg.up { color: var(--up); } .chart-chg.down { color: var(--down); }
+  .legend { display: inline-flex; gap: 12px; font-size: 12px; color: var(--muted); margin-left: auto; }
+  .legend i { display: inline-block; width: 14px; height: 3px; border-radius: 2px; vertical-align: middle; margin-right: 4px; }
+  .range { display: inline-flex; gap: 4px; flex-wrap: wrap; }
+  .range button { border: 1px solid var(--border); background: #fff; color: var(--muted); padding: 2px 9px; border-radius: 6px; cursor: pointer; font-size: 12px; transition: all .15s; }
+  .range button:hover { border-color: var(--accent); color: var(--accent); }
+  .range button.active { background: var(--text); color: #fff; border-color: var(--text); font-weight: 600; }
+  .chart-wrap { height: 480px; }
+  @media (max-width: 720px) {
+    header h1 { font-size: 18px; }
+    table { font-size: 12px; }
+    .quotes { grid-template-columns: 1fr; }
+    .quote-price { font-size: 24px; }
+    .quote-chart { width: 165px; }
+    .chart-wrap { height: 340px; }
+    /* 手机端：额度表改卡片式，避免横向溢出 */
+    .table-wrap { border: 0; border-radius: 0; background: none; overflow: visible; }
+    thead { display: none; }
+    tbody tr { display: block; background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+      padding: 6px 12px; margin-bottom: 8px; }
+    tbody td { display: flex; justify-content: space-between; align-items: center; gap: 12px;
+      padding: 4px 0; border-bottom: 0; white-space: normal; text-align: right; }
+    tbody td::before { content: attr(data-label); color: var(--muted); font-size: 11px; }
+    tbody td.name { display: block; padding: 4px 0 6px; font-size: 13px; }
+    tbody td.name::before { content: none; }
+    tr.group-row { padding: 4px 12px; margin-bottom: 8px; }
+    tr.group-row td { display: block; padding: 2px 0; }
+  }
+  footer a { color: var(--accent-soft); text-decoration: none; }
+  .dca-btn { background: var(--accent); border: 1px solid var(--accent); color: #fff;
+    padding: 5px 14px; border-radius: 16px; font-size: 13px; font-weight: 600;
+    text-decoration: none; transition: all .15s; display: inline-block; }
+  .dca-btn:hover { filter: brightness(1.18); }
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <div>
+      <h1>行情监控 · 场外额度监控</h1>
+      <div class="sub">QDII 指数实时行情（分时 / 实时点位）· 场外指数基金（A 类）申购状态与限购额度</div>
+    </div>
+    <div class="bj-clock" title="北京时间（走表）">
+      <span class="lab">北京时间</span>
+      <span class="tm" id="bj-clock-hm">--:--</span>
+      <span class="sc" id="bj-clock-ss">:--</span>
+    </div>
+  </header>
+
+  <div class="note">
+    <b>代销额度</b>=天天基金等第三方渠道（单日限购金额）。QDII 净值为滞后净值（T+1/T+2）。<br>
+    暂停申购的基金不显示限购金额（无法买入）。
+  </div>
+
+  <div class="quotes">
+    <div class="zone-head zone-us"><i></i>美国</div>
+    <div class="quote-card" data-idx="纳指100">
+      <div class="quote-main">
+        <div class="quote-name"><span class="quote-dot ndx"></span>纳斯达克100</div>
+        <div class="quote-price" id="price-ndx">—</div>
+        <div class="quote-change" id="change-ndx">—</div>
+      </div>
+      <div class="quote-chart">
+        <svg class="spark" id="spark-ndx" viewBox="0 0 120 40" preserveAspectRatio="none" aria-hidden="true"></svg>
+        <div class="spark-axis" data-mkt="us"><span>09:30</span><span>12:45</span><span>16:00</span></div>
+      </div>
+    </div>
+    <div class="quote-card" data-idx="标普500">
+      <div class="quote-main">
+        <div class="quote-name"><span class="quote-dot spx"></span>标普500</div>
+        <div class="quote-price" id="price-spx">—</div>
+        <div class="quote-change" id="change-spx">—</div>
+      </div>
+      <div class="quote-chart">
+        <svg class="spark" id="spark-spx" viewBox="0 0 120 40" preserveAspectRatio="none" aria-hidden="true"></svg>
+        <div class="spark-axis" data-mkt="us"><span>09:30</span><span>12:45</span><span>16:00</span></div>
+      </div>
+    </div>
+    <div class="zone-head zone-cn"><i></i>中国</div>
+    <div class="quote-card" data-idx="上证指数">
+      <div class="quote-main">
+        <div class="quote-name"><span class="quote-dot sse"></span>上证指数</div>
+        <div class="quote-price" id="price-sh">—</div>
+        <div class="quote-change" id="change-sh">—</div>
+      </div>
+      <div class="quote-chart">
+        <svg class="spark" id="spark-sh" viewBox="0 0 120 40" preserveAspectRatio="none" aria-hidden="true"></svg>
+        <div class="spark-axis" data-mkt="cn"><span>09:30</span><span>11:30/13:00</span><span>15:00</span></div>
+      </div>
+    </div>
+    <div class="quote-card" data-idx="创业板指">
+      <div class="quote-main">
+        <div class="quote-name"><span class="quote-dot cyb"></span>创业板指</div>
+        <div class="quote-price" id="price-cyb">—</div>
+        <div class="quote-change" id="change-cyb">—</div>
+      </div>
+      <div class="quote-chart">
+        <svg class="spark" id="spark-cyb" viewBox="0 0 120 40" preserveAspectRatio="none" aria-hidden="true"></svg>
+        <div class="spark-axis" data-mkt="cn"><span>09:30</span><span>11:30/13:00</span><span>15:00</span></div>
+      </div>
+    </div>
+    <div class="quote-card" data-idx="恒生科技">
+      <div class="quote-main">
+        <div class="quote-name"><span class="quote-dot hst"></span>恒生科技</div>
+        <div class="quote-price" id="price-hs">—</div>
+        <div class="quote-change" id="change-hs">—</div>
+      </div>
+      <div class="quote-chart">
+        <svg class="spark" id="spark-hs" viewBox="0 0 120 40" preserveAspectRatio="none" aria-hidden="true"></svg>
+        <div class="spark-axis" data-mkt="hk"><span>09:30</span><span>12:00/13:00</span><span>16:00</span></div>
+      </div>
+    </div>
+    <div class="quote-card" data-idx="黄金9999">
+      <div class="quote-main">
+        <div class="quote-name"><span class="quote-dot au"></span>黄金Au99.99</div>
+        <div class="quote-price" id="price-au">—</div>
+        <div class="quote-change" id="change-au">—</div>
+      </div>
+      <div class="quote-chart">
+        <svg class="spark" id="spark-au" viewBox="0 0 120 40" preserveAspectRatio="none" aria-hidden="true"></svg>
+        <div class="spark-axis" data-mkt="au"><span>20:00</span><span>09:00</span><span>15:30</span></div>
+      </div>
+    </div>
+    <div class="zone-head zone-ap"><i></i>亚太</div>
+    <div class="quote-card" data-idx="韩国综合">
+      <div class="quote-main">
+        <div class="quote-name"><span class="quote-dot kr"></span>韩国综合</div>
+        <div class="quote-price" id="price-kr">—</div>
+        <div class="quote-change" id="change-kr">—</div>
+      </div>
+      <div class="quote-chart">
+        <svg class="spark" id="spark-kr" viewBox="0 0 120 40" preserveAspectRatio="none" aria-hidden="true"></svg>
+        <div class="spark-axis" data-mkt="kr"><span>08:00</span><span>11:15</span><span>14:30</span></div>
+      </div>
+    </div>
+    <div class="quote-card" data-idx="日经225">
+      <div class="quote-main">
+        <div class="quote-name"><span class="quote-dot jp"></span>日经225</div>
+        <div class="quote-price" id="price-jp">—</div>
+        <div class="quote-change" id="change-jp">—</div>
+      </div>
+      <div class="quote-chart">
+        <svg class="spark" id="spark-jp" viewBox="0 0 120 40" preserveAspectRatio="none" aria-hidden="true"></svg>
+        <div class="spark-axis" data-mkt="jp"><span>08:00</span><span>10:30/11:30</span><span>14:30</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="toolbar">
+    <span class="grp">
+      <span class="lbl">指数</span>
+      <button data-filter="idx" data-val="all" class="active">全部</button>
+      <button data-filter="idx" data-val="纳指100">纳斯达克100</button>
+      <button data-filter="idx" data-val="标普500">标普500</button>
+      <button data-filter="idx" data-val="纳指科技">纳指科技</button>
+    </span>
+    <span class="grp">
+      <a class="dca-btn" href="dca.html">📈 定投模拟</a>
+    </span>
+    <span class="meta" id="updated"></span>
+  </div>
+
+  <div class="table-wrap">
+    <table id="tbl">
+      <thead>
+        <tr>
+          <th class="left no-sort">基金名称</th>
+          <th class="left no-sort">代码</th>
+          <th class="left no-sort">指数</th>
+          <th data-sort="nav">单位净值</th>
+          <th data-sort="ret_1y">近1年</th>
+          <th data-sort="otc">申购状态</th>
+          <th data-sort="otc_limit">代销额度</th>
+          <th class="no-sort">跟踪误差</th>
+          <th class="no-sort">费率(年)</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <div class="kline-title" id="kline-title">指数日K线<span class="kline-note" id="kline-note"></span></div>
+  <div class="kline-tabs" id="kline-tabs" style="display:none">
+    <button data-idx="纳指100" class="active">纳斯达克100</button>
+    <button data-idx="标普500">标普500</button>
+    <button data-idx="上证指数">上证指数</button>
+  </div>
+  <div class="chart-block" data-idx="纳指100">
+    <div class="chart-head">
+      <span class="chart-title">纳斯达克100</span>
+      <span class="chart-price" id="price-纳指100">—</span>
+      <span class="chart-chg" id="chg-纳指100">—</span>
+      <span class="legend">
+        <span><i style="background:#f59e0b"></i>MA5 <b id="ma5-纳指100">—</b></span>
+        <span><i style="background:#7c3aed"></i>MA20 <b id="ma20-纳指100">—</b></span>
+        <span><i style="background:#db2777"></i>MA50 <b id="ma50-纳指100">—</b></span>
+        <span><i style="background:#0d9488"></i>MA200 <b id="ma200-纳指100">—</b></span>
+      </span>
+      <span class="range" id="range-纳指100"></span>
+    </div>
+    <div class="chart-wrap" id="wrap-纳指100"></div>
+  </div>
+  <div class="chart-block" data-idx="标普500">
+    <div class="chart-head">
+      <span class="chart-title">标普500</span>
+      <span class="chart-price" id="price-标普500">—</span>
+      <span class="chart-chg" id="chg-标普500">—</span>
+      <span class="legend">
+        <span><i style="background:#f59e0b"></i>MA5 <b id="ma5-标普500">—</b></span>
+        <span><i style="background:#7c3aed"></i>MA20 <b id="ma20-标普500">—</b></span>
+        <span><i style="background:#db2777"></i>MA50 <b id="ma50-标普500">—</b></span>
+        <span><i style="background:#0d9488"></i>MA200 <b id="ma200-标普500">—</b></span>
+      </span>
+      <span class="range" id="range-标普500"></span>
+    </div>
+    <div class="chart-wrap" id="wrap-标普500"></div>
+  </div>
+  <div class="chart-block" data-idx="上证指数">
+    <div class="chart-head">
+      <span class="chart-title">上证指数</span>
+      <span class="chart-price" id="price-上证指数">—</span>
+      <span class="chart-chg" id="chg-上证指数">—</span>
+      <span class="legend">
+        <span><i style="background:#f59e0b"></i>MA5 <b id="ma5-上证指数">—</b></span>
+        <span><i style="background:#7c3aed"></i>MA20 <b id="ma20-上证指数">—</b></span>
+        <span><i style="background:#db2777"></i>MA50 <b id="ma50-上证指数">—</b></span>
+        <span><i style="background:#0d9488"></i>MA200 <b id="ma200-上证指数">—</b></span>
+      </span>
+      <span class="range" id="range-上证指数"></span>
+    </div>
+    <div class="chart-wrap" id="wrap-上证指数"></div>
+  </div>
+
+  <footer>
+    数据来源：天天基金，每日自动更新 · 仅场外 A 类份额 · <a href="kline.html">指数日K线</a> · <a href="dca.html">定投模拟</a>
+  </footer>
+</div>
+
+<script src="kline_echarts.js"></script>
+<script src="data.js"></script>
+<script src="kline_data.js"></script>
+<script>
+/* echarts 组件库本地缓存：页面加载过一次后存入 localStorage，之后访客秒开。
+   升级 echarts.min.js 时请同步把 KEY 里的版本号改一下，旧缓存自动失效。 */
+(function () {
+  var KEY = 'echarts.cache.5.5.1';
+  try {
+    var code = localStorage.getItem(KEY);
+    if (code && code.indexOf('</' + 'script') === -1) {
+      document.write('<scr' + 'ipt>' + code + '<\/scr' + 'ipt>');
+      return;
+    }
+  } catch (e) { /* 隐私模式等不支持 localStorage，走正常加载 */ }
+  document.write('<scr' + 'ipt src="echarts.min.js"><\/scr' + 'ipt>');
+  window.addEventListener('load', function () {
+    if (!window.echarts || !window.fetch) return;
+    fetch('echarts.min.js').then(function (r) { return r.text(); }).then(function (t) {
+      if (t && t.indexOf('</' + 'script') === -1) {
+        try { localStorage.setItem(KEY, t); } catch (e) { /* 超出配额则放弃缓存 */ }
+      }
+    }).catch(function () {});
+  });
+})();
+</script>
+<script>
+let DATA = [];
+let idxFilter = 'all';          // all / 纳指100 / 标普500 / 纳指科技；默认显示全部
+let innerSortKey = 'ret_1y';    // 默认按近1年收益率排序
+let innerSortAsc = false;       // 默认从高到低
+let otcFirst = false;           // 可申购优先：点「申购状态」列头开关；开启后可申购在前，组内仍按当前排序列
+
+const fmt = (v, d = '-') => (v === null || v === undefined || v === '') ? d : v;
+const fmtNav = (v) => (v === null || v === undefined) ? '—' : v.toFixed(4);
+
+function idxLabel(i) {
+  if (i === '标普500') return '<span class="tag idx500">标普500</span>';
+  if (i === '纳指科技') return '<span class="tag idxtech">纳指科技</span>';
+  return '<span class="tag idx100">纳指100</span>';
+}
+function otcQuota(f) {
+  const s = f.otc_status || '', lim = f.otc_limit || '';
+  // 暂停申购：不能买，不显示残留的旧额度（避免误导）
+  if (s.includes('暂停')) return '<span class="status-pause">暂停申购</span>';
+  // 其余状态（限大额/开放/限额等）统一视为「可申购」，显示限购金额
+  if (lim) return `<span class="limit">${lim}</span>`;
+  return '<span class="muted">—</span>';
+}
+function trackingError(v) {
+  if (v === null || v === undefined) return '<span class="muted">—</span>';
+  return `<span>${v.toFixed(2)}%</span>`;
+}
+function ret1yHtml(v, idx) {
+  if (v === null || v === undefined) return '<span class="muted">—</span>';
+  // 满格基准：按指数分类取各自的最大绝对值（纳指科技不参与）
+  const pool = idx === '纳指科技' ? [] : DATA.filter(f => f.index === idx);
+  const vals = pool.map(f => f.ret_1y).filter(x => x !== null && x !== undefined);
+  const maxAbs = vals.length ? Math.max(...vals.map(x => Math.abs(x)), 1) : 1;
+  const pct = Math.min(Math.abs(v) / maxAbs * 100, 100).toFixed(1);
+  const neg = v < 0;
+  const txt = `${v > 0 ? '+' : ''}${v.toFixed(2)}%`;
+  return `<div class="ret-bar-wrap"><div class="ret-bar-fill${neg ? ' neg' : ''}" style="width:${pct}%"></div><div class="ret-bar-text">${txt}</div></div>`;
+}
+function feeCell(f) {
+  const mgmt = f.fee_mgmt, cust = f.fee_custodian, buy = f.fee_buy, sales = f.fee_sales;
+  let annual = '—';
+  if (mgmt !== null && mgmt !== undefined && cust !== null && cust !== undefined) {
+    annual = (mgmt + cust).toFixed(2) + '%';
+  }
+  let sub = '';
+  if (buy !== null && buy !== undefined && buy > 0) sub = `申购${buy}%`;
+  else if (sales !== null && sales !== undefined && sales > 0) sub = `销售${sales}%`;
+  return `<span>${annual}</span>${sub ? `<div class="muted" style="font-size:11px">${sub}</div>` : ''}`;
+}
+
+function matchFilter(f) {
+  if (idxFilter !== 'all' && f.index !== idxFilter) return false;
+  return true;
+}
+
+const idxOrder = { '纳指100': 0, '标普500': 1, '纳指科技': 2 };
+const idxTitle = { '纳指100': '纳斯达克100', '标普500': '标普500', '纳指科技': '纳指科技' };
+
+// 解析限购金额为数值（"10元"→10，"100元"→100，"1万元"→10000），无法解析返回 -1
+function limitToNum(s) {
+  if (!s) return -1;
+  const m = String(s).match(/(\d+(?:\.\d+)?)\s*(万|元)?/);
+  if (!m) return -1;
+  let n = parseFloat(m[1]);
+  if (m[2] === '万') n *= 10000;
+  return n;
+}
+
+function innerCompare(a, b) {
+  let va, vb;
+  if (innerSortKey === 'otc_limit') {
+    // 额度排序：转成数值比较（"10元"→10，"1万元"→10000）
+    va = limitToNum(a.otc_limit);
+    vb = limitToNum(b.otc_limit);
+  } else {
+    va = a[innerSortKey];
+    vb = b[innerSortKey];
+  }
+  if (va === null || va === undefined) va = -Infinity;
+  if (vb === null || vb === undefined) vb = -Infinity;
+  if (typeof va === 'string') return innerSortAsc ? va.localeCompare(vb, 'zh') : vb.localeCompare(va, 'zh');
+  return innerSortAsc ? va - vb : vb - va;
+}
+
+// 申购状态分组，与状态列展示口径一致：含「暂停」= 不可申购，其余（开放/限大额）= 可申购
+const isBuyable = f => !(f.otc_status || '').includes('暂停');
+function otcCompare(a, b) {
+  const ba = isBuyable(a), bb = isBuyable(b);
+  if (ba !== bb) return ba ? -1 : 1;
+  return innerCompare(a, b);
+}
+
+function rowHtml(f) {
+  const status = f.otc_status || '';
+  const statusCell = status.includes('暂停') ? '<span class="status-pause">暂停申购</span>'
+    : '<span class="status-open">可申购</span>';
+  return `
+    <tr>
+      <td class="left name">${fmt(f.name)}</td>
+      <td class="left code" data-label="代码">${f.code}</td>
+      <td class="left" data-label="指数">${idxLabel(f.index)}</td>
+      <td data-label="单位净值">${fmtNav(f.nav)}<div class="muted" style="font-size:11px">${fmt(f.nav_date, '')}</div></td>
+      <td data-label="近1年">${ret1yHtml(f.ret_1y, f.index)}</td>
+      <td data-label="申购状态">${statusCell}</td>
+      <td data-label="代销额度">${otcQuota(f)}</td>
+      <td data-label="跟踪误差">${trackingError(f.tracking_error)}</td>
+      <td data-label="费率(年)">${feeCell(f)}</td>
+    </tr>`;
+}
+
+function render() {
+  const filtered = DATA.filter(matchFilter).sort(otcFirst ? otcCompare : innerCompare);
+
+  // 「全部」时按指数分组，各组内独立排序（纳指100 在前，标普500 在后）
+  const groups = (idxFilter === 'all'
+    ? Object.keys(idxOrder).sort((a, b) => idxOrder[a] - idxOrder[b])
+    : [idxFilter]).filter(g => filtered.some(f => f.index === g));
+
+  let html = '';
+  groups.forEach(g => {
+    html += `<tr class="group-row otc"><td colspan="9">▍${idxTitle[g]} · 场外 A 类</td></tr>`;
+    html += filtered.filter(f => f.index === g).map(rowHtml).join('');
+  });
+
+  const tbody = document.querySelector('#tbl tbody');
+  tbody.innerHTML = html || '<tr><td colspan="9" style="text-align:center;padding:30px" class="muted">没有符合条件的基金</td></tr>';
+
+  document.querySelectorAll('thead th[data-sort]').forEach(th => {
+    const k = th.dataset.sort;
+    th.querySelector('.sort-ind')?.remove();
+    if (k === 'otc' && otcFirst) th.insertAdjacentHTML('beforeend', '<span class="sort-ind"> ▼</span>');
+    else if (k === innerSortKey) th.insertAdjacentHTML('beforeend', `<span class="sort-ind">${innerSortAsc ? ' ▲' : ' ▼'}</span>`);
+  });
+
+  updateQuoteVisibility();
+  updateKlineVisibility();
+}
+
+// 筛选按钮
+document.querySelectorAll('.toolbar button[data-filter]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const kind = btn.dataset.filter, val = btn.dataset.val;
+    document.querySelectorAll(`.toolbar button[data-filter="${kind}"]`).forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    if (kind === 'idx') idxFilter = val;
+    render();
+  });
+});
+
+// 表头排序（组内）；「申购状态」列为开关：点一下可申购优先，再点恢复混排
+document.querySelectorAll('thead th[data-sort]').forEach(th => {
+  th.addEventListener('click', () => {
+    const k = th.dataset.sort;
+    if (k === 'otc') {
+      otcFirst = !otcFirst;
+    } else {
+      innerSortKey = k; innerSortAsc = false; otcFirst = false;
+    }
+    render();
+  });
+});
+
+function renderIndexQuotes(quotes) {
+  const conf = [
+    { key: '纳指100', priceId: 'price-ndx', changeId: 'change-ndx' },
+    { key: '标普500', priceId: 'price-spx', changeId: 'change-spx' },
+    { key: '上证指数', priceId: 'price-sh', changeId: 'change-sh' },
+    { key: '创业板指', priceId: 'price-cyb', changeId: 'change-cyb' },
+    { key: '恒生科技', priceId: 'price-hs', changeId: 'change-hs' },
+    { key: '黄金9999', priceId: 'price-au', changeId: 'change-au' },
+    { key: '韩国综合', priceId: 'price-kr', changeId: 'change-kr' },
+    { key: '日经225', priceId: 'price-jp', changeId: 'change-jp' },
+  ];
+  conf.forEach(({ key, priceId, changeId }) => {
+    const q = (quotes && quotes[key]) || null;
+    const priceEl = document.getElementById(priceId);
+    const changeEl = document.getElementById(changeId);
+    if (!priceEl || !changeEl) return;
+    const card = priceEl.closest('.quote-card');
+    if (!q || q.price === null || q.price === undefined) {
+      priceEl.textContent = '—';
+      priceEl.className = 'quote-price';
+      changeEl.textContent = '暂无数据';
+      changeEl.className = 'quote-change';
+      if (card) card.className = 'quote-card';
+      return;
+    }
+    const change = (q.change === null || q.change === undefined) ? 0 : q.change;
+    const pct = q.pct;
+    const cls = change > 0 ? 'up' : (change < 0 ? 'down' : 'flat');
+    priceEl.textContent = q.price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    priceEl.className = 'quote-price';        // 点数固定黑色
+    let changeTxt = (change > 0 ? '+' : '') + change.toFixed(2);
+    if (pct !== null && pct !== undefined) {
+      changeTxt += '　' + (pct > 0 ? '+' : '') + pct.toFixed(2) + '%';
+    }
+    changeEl.textContent = changeTxt;
+    changeEl.className = 'quote-change ' + cls;
+  });
+}
+
+// 行情卡片常驻显示：指数筛选按钮只过滤基金表格，不看卡片
+function updateQuoteVisibility() {
+  document.querySelectorAll('.quote-card').forEach(card => { card.style.display = ''; });
+  const container = document.querySelector('.quotes');
+  if (container) container.style.display = '';
+}
+
+// K线 tab：「全部」时两个指数共用一块图表区，点标签切换；选具体指数时自动定位
+let klineTab = '纳指100';
+function updateKlineVisibility() {
+  const blocks = document.querySelectorAll('.chart-block');
+  const tabs = document.getElementById('kline-tabs');
+  if (tabs) tabs.style.display = (idxFilter === 'all') ? 'inline-flex' : 'none';
+  let visible = 0;
+  blocks.forEach(b => {
+    const show = (idxFilter === 'all') ? (b.dataset.idx === klineTab) : (idxFilter === b.dataset.idx);
+    b.style.display = show ? '' : 'none';
+    if (show) visible++;
+  });
+  const title = document.getElementById('kline-title');
+  if (title) title.style.display = (visible === 0) ? 'none' : '';
+  // 图表容器从隐藏变可见后，需要重算尺寸（首显时补建实例）
+  if (window.KLINE_ECHARTS) window.KLINE_ECHARTS.resizeAll();
+}
+document.querySelectorAll('#kline-tabs button').forEach(b => {
+  b.addEventListener('click', () => {
+    klineTab = b.dataset.idx;
+    document.querySelectorAll('#kline-tabs button').forEach(x => x.classList.toggle('active', x === b));
+    updateKlineVisibility();
+  });
+});
+
+// 行情卡片分时走势线（同花顺样式）：横轴固定全天交易时段——盘中画到当前分钟、右侧留白，
+// 每分钟向右长一格，永远不整体重缩放（美股 09:30~16:00 纽约 391 个分钟槽，A股
+// 09:30~11:30/13:00~15:00 共 241 个，东财序列不输出午休空档、槽位天然压缩）。
+// 线色与渐变面积按「现价 vs 昨收」红涨绿跌（同花顺口径：数字跟昨收）；灰色虚线 =
+// 昨日收盘价（ref 参数，与曲线同量纲）。纵轴范围 = 曲线波幅 ∪ 昨收（同花顺同款），
+// 虚线永远显示在真实相对位置；大跳空日曲线会相应变扁，这是行情的真实形状。
+function drawSpark(elId, points, ref, us) {
+  const el = document.getElementById(elId);
+  if (!el || !points || points.length < 2) { if (el) el.innerHTML = ''; return; }
+  const N = (us || 240) | 0;                // 全天槽位（分钟数-1）：美股390/A股240/港股330/黄金780/韩股390/日股330
+  const W = 120, H = 40, P = 3;
+  const refv = (ref === null || ref === undefined || !isFinite(ref)) ? null : ref;
+  let lo = Math.min(...points), hi = Math.max(...points);
+  if (refv !== null) { lo = Math.min(lo, refv); hi = Math.max(hi, refv); }
+  const span = (hi - lo) || (Math.abs(hi) * 0.002) || 1;
+  const px = i => P + (Math.min(i, N) / N) * (W - 2 * P);
+  const py = v => H - P - (v - lo) * (H - 2 * P) / span;
+  const d = points.map((v, i) => (i ? 'L' : 'M') + px(i).toFixed(2) + ',' + py(v).toFixed(2)).join('');
+  const last = points[points.length - 1];
+  // 红绿判定：优先用报价涨跌额的符号（applyData / paintQuote 写入 __SPARK_UP，与价格栏
+  // 同源同笔）——烤库偶发缺昨收基准也绝不串色；没有该记号时退回老判断（末点 vs 昨收，
+  // 再退与首点比）：所谓「现价 vs 昨收」本就是涨跌额的正负，只是它的来源更可靠
+  let up = (window.__SPARK_UP || {})[elId];
+  if (up === undefined) up = last >= (refv !== null ? refv : points[0]);
+  const color = up ? '#dc2626' : '#16a34a';
+  const gid = 'sg-' + elId;
+  let html = `<defs><linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1">` +
+    `<stop offset="0" stop-color="${color}" stop-opacity=".26"/>` +
+    `<stop offset="1" stop-color="${color}" stop-opacity=".03"/></linearGradient></defs>` +
+    `<path d="${d} L${px(points.length - 1).toFixed(2)},${H - P} L${P},${H - P} Z" fill="url(#${gid})"/>`;
+  if (refv !== null) {
+    html += `<path d="M${P},${py(refv).toFixed(2)} L${W - P},${py(refv).toFixed(2)}"` +
+      ` stroke="#9aa4b2" stroke-width=".8" stroke-dasharray="3,2.4" fill="none" vector-effect="non-scaling-stroke"/>`;
+  }
+  html += `<path d="${d}" fill="none" stroke="${color}" stroke-width="1.7" stroke-linejoin="round" ` +
+    `stroke-linecap="round" vector-effect="non-scaling-stroke"/>`;
+  // 端点圆点：viewBox 是 120×40，但页面把它横向拉宽、纵向拉矮（preserveAspectRatio="none"），
+  // circle 会被拉成横椭圆；按当前渲染尺寸反算 rx/ry，把圆点固定成屏幕上 3px 半径的正圆
+  const rect = el.getBoundingClientRect();
+  const sx = rect.width / W || 1, sy = rect.height / H || 1;
+  const dr = 2;   // 圆点屏幕半径（像素）
+  html += `<ellipse cx="${px(points.length - 1).toFixed(2)}" cy="${py(last).toFixed(2)}" ` +
+    `rx="${(dr / sx).toFixed(2)}" ry="${(dr / sy).toFixed(2)}" fill="${color}"/>`;
+  el.innerHTML = html;
+}
+
+// 卡片时间刻度：统一北京时间显示。美股卡动态换算——美东当日的 UTC 偏移决定夏/冬令时
+//（夏令时 GMT-4：开盘 09:30 → 北京 21:30、收盘 16:00 → 04:00；冬令时 GMT-5：22:30 → 05:00），
+// 每 60 分钟重算一次（跨过 3 月/11 月的切换时刻也能自动对齐）；A股本身就是北京时间，静态不动。
+function ny2cst(hhmm, now) {
+  let usOff = -5;   // 保底按冬令时
+  try {
+    const tx = new Intl.DateTimeFormat('en-US',
+      { timeZone: 'America/New_York', timeZoneName: 'longOffset' })
+      .formatToParts(now || new Date()).find(p => p.type === 'timeZoneName').value;
+    const mt = tx && tx.match(/GMT([+-]\d+)/);
+    if (mt) usOff = parseInt(mt[1], 10);
+  } catch (e) { /* 老浏览器不支持 longOffset：用保底值 */ }
+  const c = hhmm.split(':');
+  const tot = ((+c[0] * 60) + (+c[1]) + (8 - usOff) * 60) % 1440;
+  return ('0' + Math.floor(tot / 60)).slice(-2) + ':' + ('0' + tot % 60).slice(-2);
+}
+function updateSparkAxis(now) {
+  document.querySelectorAll('.spark-axis[data-mkt="us"]').forEach(el => {
+    el.children[0].textContent = ny2cst('09:30', now);
+    el.children[1].textContent = ny2cst('12:45', now);
+    el.children[2].textContent = ny2cst('16:00', now);
+  });
+}
+updateSparkAxis();
+setInterval(() => updateSparkAxis(), 3600000);
+
+function applyData(d) {
+  DATA = d.funds || [];
+  document.getElementById('updated').textContent = '更新于 ' + (d.updated || '—');
+  renderIndexQuotes(d.index_quotes);
+  // 分时底图：昨收基准优先用 scrape 烤库的同量纲值（__SPARK_PRE：纳指100=QQQ 口径、
+  // 标普/上证/创业板=指数口径）；实时报价落地后由报价自带的昨收字段覆盖（livePre 指数口径，
+  // QQQ 口径的纳指100除外）——零烤库也能靠服务器端实时链路直接出图
+  const mi = d.index_minutes || {};
+  window.__SPARK_PRE = window.__SPARK_PRE || {};
+  window.__SPARK_LEN = window.__SPARK_LEN || {};
+  window.__SPARK_PTS = {};
+  [['spark-ndx', '纳指100', 390, 0], ['spark-spx', '标普500', 390, 1], ['spark-sh', '上证指数', 240, 1], ['spark-cyb', '创业板指', 240, 1],
+   ['spark-hs', '恒生科技', 330, 1], ['spark-au', '黄金9999', 780, 1],
+   ['spark-kr', '韩国综合', 390, 1], ['spark-jp', '日经225', 330, 1]].forEach(([id, name, slots, fb]) => {
+    const m = mi[name], q = (d.index_quotes || {})[name];
+    // 末位 fb：昨收兜底开关。「点位-涨跌额」是指数口径，只对曲线同为指数口径的卡片安全；
+    // 纳指100 分时是 QQQ 口径（无兜底），烤库丢了 pre 就宁可不画底图——
+    // 拿指数量纲基准怼上 QQQ 曲线会撑爆 y 轴、把曲线压成一条直线
+    const ref = (m && m.pre != null) ? m.pre
+      : (fb && q && q.price != null && q.change != null ? q.price - q.change : null);
+    if (ref != null) window.__SPARK_PRE[id] = ref;
+    // 分时线红绿：与价格栏同源的涨跌额符号（applyData 烤库首帧先记一次，
+    // 之后每 5 秒由实时报价 paintQuote 刷新）——昨收基准只管虚线，不再影响红绿
+    window.__SPARK_UP = window.__SPARK_UP || {};
+    if (q && q.change != null) window.__SPARK_UP[id] = q.change >= 0;
+    drawSpark(id, m && m.pts, ref, slots);
+    window.__SPARK_LEN[id] = (m && m.pts || []).length;
+    if (m && m.pts) window.__SPARK_PTS[id] = m.pts;
+  });
+  render();
+}
+
+if (window.FUND_DATA) {
+  applyData(window.FUND_DATA);
+} else {
+  fetch('data.json').then(r => r.json()).then(applyData).catch(e => {
+    document.querySelector('#tbl tbody').innerHTML =
+      '<tr><td colspan="9" style="text-align:center;padding:30px" class="muted">加载数据失败：请先运行 scrape.py 生成数据，或双击「启动.bat」</td></tr>';
+  });
+}
+
+// 纳指100 拼接口径说明（接缝信息由 kline_data.js 的 KLINE_SPLICE_META 提供）
+(function () {
+  const m = window.KLINE_SPLICE_META;
+  const el = document.getElementById('kline-note');
+  if (el && m && m.prefix) {
+    el.textContent = '纳斯达克100：' + m.prefix.end + ' 前为 QQQ 复权价折算拼接，仅作趋势参考';
+  }
+})();
+
+// 初始化K线图（ECharts 渲染模块，与 kline.html 共用）
+document.querySelectorAll('.chart-block').forEach(block => {
+  const idx = block.dataset.idx;
+  window.KLINE_ECHARTS.init({
+    idx: idx,
+    elId: 'wrap-' + idx,
+    priceId: 'price-' + idx,
+    chgId: 'chg-' + idx,
+    infoId: 'info-' + idx,
+    maIds: { ma5: 'ma5-' + idx, ma20: 'ma20-' + idx, ma50: 'ma50-' + idx, ma200: 'ma200-' + idx },
+    rangeBoxId: 'range-' + idx,
+  });
+});
+</script>
+
+<script>
+/* ── 实时行情插件 ──────────────────────────────────────────────
+   通道：yingman.chitong-indextracking.xyz（自有域名 → index-tracking Worker → 新浪行情）
+   覆盖：纳斯达克100 / 标普500（美股 gb_ 现货）、上证指数 / 创业板指（A股）、
+         恒生科技（港股 rt_hkHSTECH）、黄金Au99.99（上金所 gds_AU9999）、
+         日经225 / 韩国综合（两家免费源都没有活码，唯东财可取，随分时轮询刷新 tq）
+   取数原则：有腾讯/新浪的先用腾讯/新浪，东财只当兜底或唯一源（见 fetchTrends 降级链）
+   行为：任一市场开盘时段每 5 秒刷新；全部收盘时不发请求；
+        单次失败静默跳过（卡片保持原值），连挂 3 次自动歇 30 秒；
+        任何异常均不影响页面原有功能。 ───────────────────────────── */
+(function () {
+  const RT_PROXY = 'https://yingman.chitong-indextracking.xyz/';
+  const MAP = [
+    // 纳指100 分时用东财 105.QQQ（Invesco 纳指100 旗舰 ETF）：真实纳指100 指数的分钟级
+    // 免费源不存在（新浪无美股分时、腾讯美股只回单点、东财 100.NDX100 死）。QQQ 与指数
+    // 当日走势高度一致，迷你线不展示数值；红绿仍按纳指100 自己的昨收/现价计算。
+    // A 股分时主源=腾讯分钟线（经 Worker /tminute，实测最稳），东财 trends2 经 CF 兜底；
+    // 东财通道间歇性 520：页面每 60 秒轮询自动补帧，失败保留上一帧。
+    { code: 'gb_ndx',   secid: '105.QQQ',    us: 1, mkt: 'us', priceId: 'price-ndx', changeId: 'change-ndx', sparkId: 'spark-ndx' },   // 纳斯达克100
+    { code: 'gb_inx',   secid: '100.SPX',    us: 1, mkt: 'us', livePre: 1, priceId: 'price-spx', changeId: 'change-spx', sparkId: 'spark-spx' },   // 标普500
+    { code: 'sh000001', secid: '1.000001',   us: 0, livePre: 1, tcode: 'sh000001', priceId: 'price-sh',  changeId: 'change-sh',  sparkId: 'spark-sh' },    // 上证指数
+    { code: 'sz399006', secid: '0.399006',   us: 0, livePre: 1, tcode: 'sz399006', priceId: 'price-cyb', changeId: 'change-cyb', sparkId: 'spark-cyb' },    // 创业板指
+    // 恒生科技：港股指数走腾讯分钟线（午休行自动省略，与 A 股同构）；东财兜底必须用
+    // 124.HSTECH（100.HSTECH 实测是死码：东财 trends2 返回空序列、快照名 None）
+    { code: 'rt_hkHSTECH', secid: '124.HSTECH', us: 0, mkt: 'hk', livePre: 1, tcode: 'hkHSTECH', priceId: 'price-hs', changeId: 'change-hs', sparkId: 'spark-hs' },  // 恒生科技
+    // 黄金Au99.99（上金所现货「沪金99」）：分时=东财 118.AU9999（含昨夜 20:00 起的夜盘），
+    // 涨跌按官方口径「现价−昨收」（新浪 gds 第7列 = 东财 f60）
+    { code: 'gds_AU9999', secid: '118.AU9999', us: 0, mkt: 'au', livePre: 1, priceId: 'price-au', changeId: 'change-au', sparkId: 'spark-au' },     // 黄金99.99
+    // 日经225：东财 100.N225 唯一实时源——东证 9:00~11:30/12:30~15:30 东京时间（接口输出
+    // 北京时间 08:00 起、全天 331 行）。新浪 int_nikkei 实测是整族冻结的旧快照不能用
+    // （对照实验 2026-11-25：同家族 int_sp500=6643.70，而腾讯/东财双方实时 7201.09，
+    // 隔着半年），腾讯无日韩代码——快照与分时同走东财一路（tq=「trend quote」，
+    // 由 60 秒分时轮询顺带刷新报价，末点=现价、preClose=昨收）
+    { code: '', secid: '100.N225', us: 0, mkt: 'jp', tq: 1, priceId: 'price-jp', changeId: 'change-jp', sparkId: 'spark-jp' },                        // 日经225
+    // 韩国综合 KOSPI：新浪 int_kospi 等全系变体与腾讯 kr 系代码实测全部空码——两个免费
+    // 快照源都没有这个指数，唯东财可取：快照直接读分时端点（末点=现价、preClose=昨收），
+    // 由 60 秒分时轮询顺带刷新价格（tq=「trend quote」，不走 5 秒快照）
+    { code: '', secid: '100.KS11', us: 0, mkt: 'kr', tq: 1, priceId: 'price-kr', changeId: 'change-kr', sparkId: 'spark-kr' },                        // 韩国综合
+  ];
+  // 新浪美股 gb_ 字段：0名称 1最新价 2涨跌幅% 3报价时间(北京) 4涨跌额 5开 6高 7低
+  // 新浪A股字段：0名称 1今开 2昨收 3最新价 … 30日期 31时间(北京)
+  // 新浪港股指数字段：0代码 1名称 2今开 3昨收 4高 5低 6最新 7涨跌额 8涨跌幅% … 18日期 19时间
+  // 新浪贵金属 gds_ 字段：0最新 2买价 3卖价 4高 5低 6时间 7昨收(涨跌基准) 8今开 9量 … 13名称
+  // mkt：开市判定与分时槽位按市场走（us=美股 hk=港股 au=金交所 kr=韩股 jp=日股 其余=A股）
+  // secid = 东财代码（Worker /trends 路由用，取当日分时）；us=1 表示按美股时段刷新
+
+  const style = document.createElement('style');
+  style.textContent = '.rt-badge{font-size:11px;padding:1px 7px;border-radius:9px;' +
+    'background:rgba(16,185,129,.12);color:#047857;border:1px solid rgba(16,185,129,.35);' +
+    'font-weight:600;margin-left:2px}' +
+    // 开市徽标：实心绿药丸 + 白色呼吸圆点，一眼可见「正在实时」；收市保持灰幽灵样式
+    '.rt-badge.open{background:#047857;color:#fff;border-color:#047857;' +
+    'box-shadow:0 1px 4px rgba(4,120,87,.4)}' +
+    '.rt-badge.open::before{content:"";display:inline-block;width:6px;height:6px;' +
+    'border-radius:50%;background:#fff;margin-right:4px;vertical-align:1px;' +
+    'opacity:var(--rt-o,1);transform:scale(var(--rt-s,1))}' +
+    '.rt-badge.closed{background:rgba(100,116,139,.12);color:#64748b;' +
+    'border-color:rgba(100,116,139,.35)}' +
+    '.rt-ny{font-size:10px;font-weight:600;padding:1px 6px;border-radius:4px;margin-left:2px;' +
+    'background:rgba(100,116,139,.08);color:#64748b;border:1px solid rgba(100,116,139,.22);' +
+    'font-variant-numeric:tabular-nums}';
+  document.head.appendChild(style);
+
+  // 美股是否开盘：按纽约时间判断，夏令时/冬令时自动正确（周一~五 9:30~16:00）
+  function usOpen() {
+    const d = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }));
+    const mins = d.getHours() * 60 + d.getMinutes();
+    return d.getDay() >= 1 && d.getDay() <= 5 && mins >= 570 && mins < 960;
+  }
+  // A股是否开盘：北京时间（周一~五 9:30~11:30、13:00~15:00；法定节假日不判断，
+  // 停市时新浪返回的仍是最后一笔报价，卡片只是不跳动，无副作用）
+  function cnOpen() {
+    const d = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Shanghai' }));
+    const mins = d.getHours() * 60 + d.getMinutes();
+    return d.getDay() >= 1 && d.getDay() <= 5 &&
+      ((mins >= 570 && mins < 690) || (mins >= 780 && mins < 900));
+  }
+  // 港股是否开盘：香港时间（周一~五 9:30~12:00、13:00~16:00；节假日不判断，规则同上）
+  function hkOpen() {
+    const d = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Hong_Kong' }));
+    const mins = d.getHours() * 60 + d.getMinutes();
+    return d.getDay() >= 1 && d.getDay() <= 5 &&
+      ((mins >= 570 && mins < 720) || (mins >= 780 && mins < 960));
+  }
+  // 上金所黄金是否开盘：日盘 9:00~11:30、13:30~15:30 + 夜盘 20:00~次日 02:30
+  //（夜盘跨零点：凌晨 0:00~2:30 属于前一交易日的夜盘，周六凌晨也要算开市）
+  function auOpen() {
+    const d = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Shanghai' }));
+    const wd = d.getDay(), mins = d.getHours() * 60 + d.getMinutes();
+    if (wd >= 1 && wd <= 5 && ((mins >= 540 && mins < 690) || (mins >= 810 && mins < 930))) return true;
+    if (wd >= 1 && wd <= 5 && mins >= 1200) return true;   // 周一~周五 20:00 以后
+    if (wd >= 2 && wd <= 6 && mins < 150) return true;     // 周二~周六凌晨 0:00~2:30
+    return false;
+  }
+  // 韩国股市是否开盘：首尔时间周一~五 9:00~15:30（KRX 无午休；北京时间 08:00~14:30）
+  function krOpen() {
+    const d = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
+    const mins = d.getHours() * 60 + d.getMinutes();
+    return d.getDay() >= 1 && d.getDay() <= 5 && mins >= 540 && mins < 930;
+  }
+  // 日本股市是否开盘：东京时间周一~五 9:00~11:30、12:30~15:30（2024-11 收盘延至 15:30；
+  // 北京时间 08:00~10:30、11:30~14:30）
+  function jpOpen() {
+    const d = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Tokyo' }));
+    const mins = d.getHours() * 60 + d.getMinutes();
+    return d.getDay() >= 1 && d.getDay() <= 5 && ((mins >= 540 && mins < 690) || (mins >= 750 && mins < 930));
+  }
+  // 按市场取「是否开盘」与「全天分时槽位数」（槽位 = 分钟数-1：美股391点→390，A股241→240，
+  // 港股331→330，黄金781→780（昨夜 20:00→02:30 共390行 + 今日 09:00→15:30 共391行），
+  // 韩股391→390（9:00~15:30 无午休），日股331→330（东财序列不输出午休空档））
+  function mktOpen(m) {
+    return m.mkt === 'us' ? usOpen() : m.mkt === 'hk' ? hkOpen() : m.mkt === 'au' ? auOpen()
+      : m.mkt === 'kr' ? krOpen() : m.mkt === 'jp' ? jpOpen() : cnOpen();
+  }
+  function mktSlots(m) { return m.mkt === 'us' ? 390 : m.mkt === 'hk' ? 330 : m.mkt === 'au' ? 780 : m.mkt === 'kr' ? 390 : m.mkt === 'jp' ? 330 : 240; }
+  // 「今日当前交易时段已经走了多少分钟」——开盘换日检测的分母。东财换日有滞后：刚
+  // 开盘时常还端着上一交易日的全天序列；烤库分时同样是抓取那天的全天线。序列点数
+  // 远超这个值（+10 容余，含港美股集合竞价多出的几行）时，这条线必是旧日线，
+  // 今日盘中不能拿它顶当天的线。按市场分段累计（A股/港股跳过午休、黄金跨零点）。
+  function sessionElapsedMin(m) {
+    const tzMin = tz => {
+      const d = new Date(new Date().toLocaleString('en-US', { timeZone: tz }));
+      return d.getHours() * 60 + d.getMinutes();
+    };
+    let t;
+    switch (m.mkt) {
+      case 'us': t = tzMin('America/New_York'); return Math.min(Math.max(t - 570, 0), 390);
+      case 'hk': t = tzMin('Asia/Hong_Kong');
+        return t >= 570 && t < 720 ? t - 570 : t >= 780 && t < 960 ? 150 + t - 780 : 330;
+      case 'kr': t = tzMin('Asia/Seoul'); return Math.min(Math.max(t - 540, 0), 390);
+      case 'jp': t = tzMin('Asia/Tokyo');
+        return t >= 540 && t < 690 ? t - 540 : t >= 750 && t < 930 ? 150 + t - 750 : 330;
+      case 'au':   // 黄金：今天这条线从昨夜 20:00 起算（夜盘跨零点），日盘按墙钟（东财含午休行）
+        t = tzMin('Asia/Shanghai');
+        if (t >= 540 && t < 930) return 390 + t - 540;
+        if (t >= 1200) return t - 1200;
+        if (t < 150) return 240 + t;
+        return -1;
+      default:     // A 股（东财序列不含午休行）
+        t = tzMin('Asia/Shanghai');
+        if (t >= 570 && t < 690) return t - 570;
+        if (t >= 780 && t < 900) return 120 + t - 780;
+        return -1;
+    }
+  }
+  // 开盘换日体检：把「点数远超今日时段已走分钟」的上一交易日线清掉——今天的分时
+  // 从最左侧第一根分钟重新起画。收市时不调用（那时上一交易日的全天线正是该显示的）。
+  function clearStaleBaked(m) {
+    if (!mktOpen(m)) return;
+    const pts = (window.__SPARK_PTS || {})[m.sparkId];
+    const avail = sessionElapsedMin(m);
+    if (pts && avail >= 0 && pts.length > avail + 10) {
+      drawSpark(m.sparkId, null);
+      window.__SPARK_PTS[m.sparkId] = null;
+      window.__SPARK_LEN[m.sparkId] = 0;
+    }
+  }
+
+  // 徽标时间口径：状态词区分开市/收市，时间一律显示当前实际时刻（Intl 按北京时间，
+  // 跨时区访客看到同一时刻）；美股卡右侧另有当前对应的纽约时间。收市后报价轮询停止，
+  // 时钟仍走表（30 秒一跳）。
+  function clockAt(tz, withSec) {
+    try {
+      return new Intl.DateTimeFormat('en-US', { timeZone: tz, hourCycle: 'h23',
+        hour: '2-digit', minute: '2-digit', ...(withSec ? { second: '2-digit' } : {}) }).format(new Date());
+    } catch (e) { return ''; }
+  }
+  const nowCst = () => clockAt('Asia/Shanghai');
+  const nowNy = () => clockAt('America/New_York');
+  // 页头「北京时间」走表：秒级跳动，全站唯一时刻显示（与行情轮询无关，收市也走）
+  (function () {
+    const hmEl = document.getElementById('bj-clock-hm');
+    const ssEl = document.getElementById('bj-clock-ss');
+    if (!hmEl || !ssEl) return;
+    const tick = () => {
+      const t = clockAt('Asia/Shanghai', true);   // "HH:MM:SS"
+      hmEl.textContent = t.slice(0, 5);
+      ssEl.textContent = t.slice(5, 8);
+    };
+    tick();
+    setInterval(tick, 1000);
+  })();
+  function setBadge(tag, open) {
+    // 徽标只当状态灯：只显示「实时 / 收盘」状态词，不带时间——全站时刻集中在页头走表
+    tag.textContent = open ? '实时' : '收盘';
+    tag.className = 'rt-badge' + (open ? ' open' : ' closed');
+  }
+  function refreshClockEls() {
+    MAP.forEach(m => {
+      const priceEl = document.getElementById(m.priceId);
+      const nameEl = priceEl && priceEl.parentElement.querySelector('.quote-name');
+      if (!nameEl) return;
+      const tag = nameEl.querySelector('.rt-badge');
+      if (tag) setBadge(tag, mktOpen(m));
+      const chip = nameEl.querySelector('.rt-ny');
+      if (chip) chip.textContent = '美东 ' + nowNy();
+    });
+  }
+  setInterval(refreshClockEls, 30000);
+
+  // 实时尾点：把最新报价盖写当前分钟末端槽位（只改值不加坑，长度由分钟数据推进），
+  // 爆拉/跳水时曲线右端数秒内跟上。按 昨收×现价/昨收 的比例换算，天然兼容 QQQ
+  // 量纲的纳指100（指数口径卡片该式恰好等于现价本身）。
+  function updateSparkTail(sparkId, price, chg, m) {
+    const prev = price - chg;
+    if (!prev || !isFinite(prev) || !mktOpen(m)) return;
+    const pts = (window.__SPARK_PTS || {})[sparkId];
+    const pre = (window.__SPARK_PRE || {})[sparkId];
+    if (!pts || pts.length < 2 || !isFinite(pre)) return;
+    // 量纲体检：昨收基准必须落在曲线自身的合理邻域内，否则数据源与曲线不同量纲
+    //（如换兜底源后口径漂了），直接收手不写尾点——绝不用错量纲基准盖飞曲线末端
+    const lo = Math.min(...pts), hi = Math.max(...pts);
+    if (pre < lo * 0.85 || pre > hi * 1.15) return;
+    pts[pts.length - 1] = pre * price / prev;
+    drawSpark(sparkId, pts, pre, mktSlots(m));
+  }
+
+  function apply(m, f) {
+    let price, pct, chg, hhmm;
+    if (m.code.indexOf('gb_') === 0) {
+      // 美股 gb_ 现货：1最新价 2涨跌幅% 3报价时间 4涨跌额
+      price = parseFloat(f[1]); pct = parseFloat(f[2]); chg = parseFloat(f[4]);
+      hhmm = (f[3] || '').slice(11, 16);
+    } else if (m.code.indexOf('rt_hk') === 0) {
+      // 港股指数：2今开 3昨收 4高 5低 6最新 7涨跌额 8涨跌幅%
+      price = parseFloat(f[6]);
+      const prev = parseFloat(f[3]);
+      chg = parseFloat(f[7]);
+      pct = parseFloat(f[8]);
+      hhmm = (f[19] || '').slice(0, 5);
+    } else if (m.code.indexOf('gds_') === 0) {
+      // 上金所贵金属：0最新 4高 5低 6时间 7昨收(官方涨跌基准，上金所口径)
+      price = parseFloat(f[0]);
+      const prev = parseFloat(f[7]);
+      chg = price - prev;
+      pct = prev > 0 ? chg / prev * 100 : NaN;
+      hhmm = f[6] || '';
+    } else {
+      // A股指数：2昨收 3最新价 31时间（涨跌额/涨跌幅由昨收现算）
+      price = parseFloat(f[3]);
+      const prev = parseFloat(f[2]);
+      chg = price - prev;
+      pct = prev > 0 ? chg / prev * 100 : NaN;
+      hhmm = (f[31] || '').slice(0, 5);
+    }
+    if (!isFinite(price) || !isFinite(pct) || !isFinite(chg)) return;
+    // 分时昨收基准：指数口径卡片用实时报价自带的昨收覆盖烤库值（服务器端链路即可出图）
+    const livePrev = (m.code.indexOf('gb_') === 0) ? price - chg
+      : (m.code.indexOf('gds_') === 0) ? parseFloat(f[7])
+      : (m.code.indexOf('rt_hk') === 0) ? parseFloat(f[3])
+      : parseFloat(f[2]);
+    if (m.livePre && isFinite(livePrev)) {
+      window.__SPARK_PRE = window.__SPARK_PRE || {};
+      window.__SPARK_PRE[m.sparkId] = livePrev;
+    }
+    paintQuote(m, price, chg, pct);
+  }
+
+  // 上卡片统一画法（报价 5 秒轮询与 tq 指数 60 秒分时轮询共用）：点数固定黑色、
+  // 涨跌额/% 红涨绿跌、角标按市场开市状态走、美股卡附当前纽约时刻
+  function paintQuote(m, price, chg, pct) {
+    if (!isFinite(price) || !isFinite(chg) || !isFinite(pct)) return;
+    const priceEl = document.getElementById(m.priceId);
+    const changeEl = document.getElementById(m.changeId);
+    if (!priceEl || !changeEl) return;
+    const cls = pct > 0 ? 'up' : (pct < 0 ? 'down' : 'flat');
+    // 分时线红绿记号：以报价涨跌额符号为准（与价格栏同源同笔），画线 drawSpark 读取
+    (window.__SPARK_UP = window.__SPARK_UP || {})[m.sparkId] = chg >= 0;
+    priceEl.textContent = price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    priceEl.className = 'quote-price';        // 点数固定黑色，不随涨跌变色
+    changeEl.textContent = (chg > 0 ? '+' : '') + chg.toFixed(2) + '　' + (pct > 0 ? '+' : '') + pct.toFixed(2) + '%';
+    changeEl.className = 'quote-change ' + cls;   // 涨跌额/涨跌幅保持红涨绿跌
+    updateSparkTail(m.sparkId, price, chg, m);
+    const nameEl = priceEl.parentElement.querySelector('.quote-name');
+    if (nameEl) {
+      let tag = nameEl.querySelector('.rt-badge');
+      if (!tag) { tag = document.createElement('span'); tag.className = 'rt-badge'; nameEl.appendChild(tag); }
+      // 状态词区分开市/收市（含A股午休、港股午休、金交所夜盘），时间恒为当前北京时间
+      setBadge(tag, mktOpen(m));
+      if (m.mkt === 'us') {
+        let chip = nameEl.querySelector('.rt-ny');
+        if (!chip) { chip = document.createElement('span'); chip.className = 'rt-ny'; nameEl.appendChild(chip); }
+        chip.textContent = '美东 ' + nowNy();
+      }
+    }
+  }
+
+  let fails = 0, restUntil = 0;
+  function pull() {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 6000);   // 单次最长等 6 秒
+    fetch(RT_PROXY, { cache: 'no-store', signal: ctrl.signal })
+      .then(r => r.text())
+      .then(txt => {
+        clearTimeout(timer);
+        MAP.forEach(m => {
+          if (!m.code) return;   // tq 指数（韩国综合）无快照码，报价随分时轮询刷新
+          const mtch = txt.match(new RegExp('hq_str_' + m.code + '="([^"]*)"'));
+          if (mtch) apply(m, mtch[1].split(','));
+        });
+        fails = 0;
+      })
+      .catch(() => {
+        if (++fails >= 3) { restUntil = Date.now() + 30000; fails = 0; }
+      });
+  }
+
+  // 每 5 秒一拉（观感依旧连贯，Worker 调用量比 3 秒省四成）；六个市场都不在开盘时段时不发请求，连续失败期间暂停
+  setInterval(() => { if ((usOpen() || cnOpen() || hkOpen() || auOpen() || krOpen() || jpOpen()) && Date.now() >= restUntil) pull(); }, 5000);
+  pull();                    // 进页面先拉一次：休市也能把最新收盘价点亮到卡片
+  window.__rtPull = pull;    // 调试钩子：控制台输入 __rtPull() 可手动触发
+
+  // 分时取数降级链：腾讯分钟线（/tminute，A 股/港股主源、实测最稳）→ 东财经 CF（/trends）
+  // → 访客浏览器直连东财（最终兜底）。东财会成波地封 Cloudflare 机房 IP（整条 /trends 一齐
+  // 520，一波可持续几分钟到更久）；封锁波高峰时它连浏览器直连也会按指纹掐断（2026-11-25
+  // 实测：同几分钟内 urllib 能通、页面 fetch 被拒），这类时段只能靠 60 秒轮询等到波谷。
+  function fetchTrends(m) {
+    const urls = [];
+    if (m.tcode) urls.push(RT_PROXY + 'tminute?code=' + m.tcode);
+    urls.push(RT_PROXY + 'trends?secid=' + m.secid);
+    urls.push('https://push2his.eastmoney.com/api/qt/stock/trends2/get?secid=' + m.secid +
+      '&fields1=f1,f2,f3,f7,f8&fields2=f51,f53,f56,f58&ndays=1&iscr=0');
+    // 韩日末位兜底：push2delay 的 1 分钟 K 线与分时是两个存储，东财分时换日滞后时它
+    // 开盘即有今天的柱子（2026-11-26 实测）。只用给 tq 市场——美股卡的 secid 是 ETF
+    //（105.QQQ），量纲与指数不同，不能混进这条链。
+    if (m.tq) urls.push('https://push2delay.eastmoney.com/api/qt/stock/kline/get?secid=' + m.secid +
+      '&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f53&klt=1&fqt=0&end=20500101&lmt=500');
+    // 关键：东财「半故障期」会返回 200 + 空数据（data.trends 缺失或空数组），若把空应答当
+    // 成功，链条会停在这儿、永远不落到直连兜底——必须把「解析后不足 2 个点」也当失败传下去
+    const count = j => {
+      const d = (j && j.data) || {};
+      if (Array.isArray(d.trends)) return d.trends.length;
+      if (Array.isArray(d.klines)) return d.klines.length;
+      let rows = m.tcode && d[m.tcode] && d[m.tcode].data && d[m.tcode].data.data;
+      rows = typeof rows === 'string' ? rows.split(';') : (Array.isArray(rows) ? rows : []);
+      return rows.length;
+    };
+    return urls.reduce((chain, u) => chain.catch(() =>
+      fetch(u, { cache: 'no-store' }).then(r => { if (!r.ok) throw 0; return r.json(); })
+        .then(j => { if (count(j) < 2) throw 0; return j; })
+    ), Promise.reject());
+  }
+  // 兼容三种返回形态：东财 trends2 的 data.trends=[“日期 时间,价,…”]、东财 kline 的
+  // data.klines=[“日期 时间,收盘价,…”]（/trends 与 kline 行的取值列同为第 2 列）、
+  // 腾讯 minute/query 的 data[代码].data.data=[“0930 价 量 额”,…]
+  function parseTrends(j, m) {
+    const d = (j && j.data) || {};
+    const out = [];
+    if (Array.isArray(d.trends)) {
+      d.trends.forEach(row => {
+        const v = parseFloat(String(row).split(',')[1]);
+        if (isFinite(v)) out.push(v);
+      });
+    } else if (Array.isArray(d.klines)) {
+      d.klines.forEach(row => {
+        const v = parseFloat(String(row).split(',')[1]);
+        if (isFinite(v)) out.push(v);
+      });
+    } else if (m.tcode && d[m.tcode]) {
+      let rows = (d[m.tcode].data || {}).data;
+      if (typeof rows === 'string') rows = rows.split(';');
+      (rows || []).forEach(row => {
+        const v = parseFloat(String(row).trim().split(/\s+/)[1]);
+        if (isFinite(v)) out.push(v);
+      });
+    }
+    return out;
+  }
+  // 分时迷你线：每 60 秒按各自市场开盘状态增量刷新（报价接口只有快照，分时序列走 Worker /trends）
+  // tq 烤库兜底：日经225/韩国综合的实时链路全断（东财封波）时，收市态直接用烤库分时
+  // 末点当收盘价上卡（烤库在收市后生成，末点=当日收盘，顺带点亮「收盘」角标）；
+  // 开市中不用烤库旧值（等实时链路恢复再刷新）
+  function paintTqFromBaked(m) {
+    if (!m.tq || mktOpen(m)) return;
+    const pts = (window.__SPARK_PTS || {})[m.sparkId];
+    const ref = (window.__SPARK_PRE || {})[m.sparkId];
+    if (pts && pts.length >= 2 && isFinite(ref)) {
+      const lp = pts[pts.length - 1];
+      paintQuote(m, lp, lp - ref, (lp - ref) / ref * 100);
+    }
+  }
+  // 韩日快照行情：这两张卡没有实时快照源（腾讯无码、新浪 int_ 家族冻结），此前价格
+  // 只能跟随分时末点——而东财分时对日经的换日常迟一个多小时（2026-11-26 实测：东京
+  // 开盘 1.5 小时后 trends2 仍端着前一日全天线），早盘价格整个挂着昨天的收盘。
+  // 改轮询东财「实时快照」ulist.np（与分时不同管线，开盘即新）：Worker /quote 优先，
+  // 访客浏览器直连兜底（该接口带 CORS 放行，f18 即昨收）。收市不拉（收盘态由
+  // paintTqFromBaked 用烤库分时末点上卡）。
+  function pollTqQuotes() {
+    const ls = MAP.filter(m => m.tq && mktOpen(m));
+    if (!ls.length) return;
+    const qs = encodeURIComponent(ls.map(m => m.secid).join(','));
+    const paint = j => {
+      const diff = ((j && j.data) || {}).diff || [];
+      ls.forEach(m => {
+        const it = diff.find(x => m.secid.endsWith(String(x.f12 || '%')));
+        if (!it || !isFinite(it.f2) || !isFinite(it.f18) || !it.f18) return;
+        const chg = isFinite(it.f4) ? Number(it.f4) : it.f2 - it.f18;
+        const pct = isFinite(it.f3) ? Number(it.f3) : chg / it.f18 * 100;
+        paintQuote(m, it.f2, chg, pct);
+        m.__snapPre = it.f18;          // 供分时画线虚线基准 & tq 兜底画法取正确昨收
+        m.__snapAt = Date.now();
+      });
+    };
+    fetch(RT_PROXY + 'quote?secids=' + qs, { cache: 'no-store' })
+      .then(r => { if (!r.ok) throw 0; return r.json(); })
+      .then(paint)
+      .catch(() => fetch('https://push2.eastmoney.com/api/qt/ulist.np/get?fltt=2&np=1&secids=' + qs +
+          '&fields=f2,f3,f4,f12,f14,f18', { cache: 'no-store' })
+        .then(r => { if (!r.ok) throw 0; return r.json(); })
+        .then(paint)
+        .catch(() => {}));
+  }
+  function minutePull(m, once) {
+    const open = mktOpen(m);
+    paintTqFromBaked(m);
+    // 开市逐分钟补帧；收市仅进页面时补拉一次（拿到比静态底图更完整的全天序列才采用），此后保持画面
+    if (!open) { if (!once || m._closed) return; m._closed = 1; }
+    fetchTrends(m)
+      .then(j => {
+        const pts = parseTrends(j, m);
+        // 开盘换日体检：东财换日有滞后，刚开盘可能仍返回上一交易日的全天序列——
+        // 点数远超今日时段已走分钟即判旧线，弃用，等今天的点从最左侧起画
+        const avail = sessionElapsedMin(m);
+        if (open && avail >= 0 && pts.length > avail + 10) return;
+        // 画线基准（虚线）：韩日快照刚更新过时用快照带回的昨收——东财分时换日
+        // 滞后期间，烤库/分时自带的昨收是上一交易日的，位置会画错
+        let ref = (m.__snapPre && m.__snapAt && Date.now() - m.__snapAt < 150000)
+          ? m.__snapPre : (window.__SPARK_PRE || {})[m.sparkId];
+        const curLen = (window.__SPARK_LEN || {})[m.sparkId] || 0;
+        // 量纲体检：昨收必须落在曲线自身的合理邻域内，否则说明基准与曲线不同量纲
+        //（如烤库丢分时、曲线走了另一条数据源），弃用基准、照常画线（无虚线），
+        // 绝不拿错量纲的基准去撑 y 轴——那会把整条曲线压成一条直线
+        if (isFinite(ref)) {
+          const lo = Math.min.apply(null, pts), hi = Math.max.apply(null, pts);
+          if (ref < lo * 0.85 || ref > hi * 1.15) ref = null;
+        }
+        // 收市补拉只有在比当前画面更完整（全天 > 半天）时才替换，避免画面来回跳变
+        if (pts.length >= 2) {
+          // 收市补拉只有在比当前画面更完整（全天 > 半天）时才替换，避免画面来回跳变
+          if (open || pts.length > curLen) {
+            drawSpark(m.sparkId, pts, ref, mktSlots(m));
+            window.__SPARK_LEN[m.sparkId] = pts.length;
+            window.__SPARK_PTS[m.sparkId] = pts;
+          }
+          // tq 指数（日经225/韩国综合）：快照通道每分钟都在刷价格数字，这里只在快照
+          // 没接通时才用分时末点上卡——否则两条通道值有秒级差异，数字会来回跳
+          if (m.tq && !(m.__snapAt && Date.now() - m.__snapAt < 150000) && isFinite(ref)) {
+            const lp = pts[pts.length - 1];
+            paintQuote(m, lp, lp - ref, (lp - ref) / ref * 100);
+          }
+        }
+      })
+      .catch(() => {});
+  }
+  setInterval(() => {
+    if (Date.now() < restUntil) return;
+    MAP.forEach(clearStaleBaked);   // 先做开盘换日体检（盘中跨过开盘时刻也能及时换线），再补帧
+    pollTqQuotes();                 // 韩日价格不等分时翻日（日经换日常迟一个多小时）
+    MAP.forEach(minutePull);
+  }, 60000);
+  // 实时圆点统一呼吸：所有开市卡共用同一只时钟（CSS 动画各元素起拍时刻不同、相位参差，
+  // 看着难受）。余弦呼吸每 60ms 算一步，缩放/透明度写进全局 CSS 变量，所有 ::before 同步跟读。
+  (function () {
+    const P = 1600;   // 呼吸周期（毫秒）
+    const tick = () => {
+      const f = 0.5 - 0.5 * Math.cos(2 * Math.PI * (performance.now() % P) / P);
+      const st = document.documentElement.style;
+      st.setProperty('--rt-s', (1 - 0.45 * f).toFixed(3));   // 缩放 1 → 0.55
+      st.setProperty('--rt-o', (1 - 0.6 * f).toFixed(3));    // 亮度 1 → 0.4
+    };
+    tick();
+    setInterval(tick, 60);
+  })();
+  MAP.forEach(clearStaleBaked);          // 进页面先体检一次：清掉上一交易日的烤库全天线
+  MAP.forEach(m => minutePull(m, 1));   // 进页面立即对齐一次；收市也补拉一次完整分时（仅此一次）
+  pollTqQuotes();                        // 进页面立即修一次韩日价格（烤库值可能是上一交易日的）
+  window.__rtMinute = once => MAP.forEach(m => minutePull(m, once));   // 调试钩子
+  window.__sessElapsed = () => MAP.map(m => [m.sparkId, mktOpen(m), sessionElapsedMin(m)]);   // 调试钩子
+})();
+</script>
+</body>
+</html>
