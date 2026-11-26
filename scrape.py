@@ -55,8 +55,10 @@ FUNDS = [
 ]
 
 UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36"
-OUT_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data.json")
-JS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data.js")
+_OUT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "public")
+os.makedirs(_OUT_DIR, exist_ok=True)   # public/ 目录随用随建
+OUT_FILE = os.path.join(_OUT_DIR, "data.json")
+JS_FILE = os.path.join(_OUT_DIR, "data.js")
 
 
 def fetch(url, referer="https://fund.eastmoney.com/", retry=3, raw=False):

@@ -46,7 +46,7 @@ if errorlevel 1 (
 )
 
 echo [2/2] Opening the page in your browser ...
-start "" "%~dp0index.html"
+start "" "%~dp0public\index.html"
 echo.
 echo Done! The page now shows the latest data.
 echo Tip: double-click this file every day to refresh.

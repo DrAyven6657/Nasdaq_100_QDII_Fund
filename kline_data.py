@@ -62,7 +62,9 @@ SYMBOLS = {
 QQQ_SRC = ("sinaus", "qqq")
 # dca.html 定投模拟用场外基金：key 与页脚下拉框 value 对应，value=天天基金代码
 DCA_FUNDS = {"红利低波50": "008163"}  # 南方标普中国A股大盘红利低波50ETF联接A
-OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "kline_data.js")
+_OUT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "public")
+os.makedirs(_OUT_DIR, exist_ok=True)
+OUT = os.path.join(_OUT_DIR, "kline_data.js")
 # 纳指100 折算前缀的冻结文件与重建来源（说明见模块 docstring「纳指100 历史拼接说明」）
 PREFIX_ARTIFACT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "kline_prefix.json")
 PAGES_BACKUP = os.path.join(os.path.dirname(os.path.abspath(__file__)), "kline_data_pages_backup.js")
