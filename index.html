@@ -90,6 +90,20 @@
   footer { text-align: center; color: var(--muted); font-size: 12px; margin-top: 20px; }
   /* 指数行情卡片 */
   .quotes { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin: 14px 0; }
+  /* 分组标签：横跨整行的地区大标（美国 / 中国 / 亚太），组名随地区着色 */
+  .zone-head { grid-column: 1 / -1; display: flex; align-items: center; gap: 9px;
+    font-size: 16px; font-weight: 800; letter-spacing: 4px; margin-top: 6px; }
+  .zone-head i { width: 5px; height: 17px; border-radius: 3px; flex: none; }
+  .zone-head::after { content: ""; flex: 1; height: 2px; border-radius: 1px; opacity: .5; }
+  .zone-head.zone-us { color: #2563eb; }
+  .zone-head.zone-us i { background: #2563eb; }
+  .zone-head.zone-us::after { background: #2563eb; }
+  .zone-head.zone-cn { color: #dc2626; }
+  .zone-head.zone-cn i { background: #dc2626; }
+  .zone-head.zone-cn::after { background: #dc2626; }
+  .zone-head.zone-ap { color: #0d9488; }
+  .zone-head.zone-ap i { background: #0d9488; }
+  .zone-head.zone-ap::after { background: #0d9488; }
   .quote-card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 14px 18px;
     display: flex; align-items: center; justify-content: space-between; gap: 16px; }
   .quote-main { min-width: 0; }
@@ -183,6 +197,7 @@
   </div>
 
   <div class="quotes">
+    <div class="zone-head zone-us"><i></i>美国</div>
     <div class="quote-card" data-idx="纳指100">
       <div class="quote-main">
         <div class="quote-name"><span class="quote-dot ndx"></span>纳斯达克100</div>
@@ -205,6 +220,7 @@
         <div class="spark-axis" data-mkt="us"><span>09:30</span><span>12:45</span><span>16:00</span></div>
       </div>
     </div>
+    <div class="zone-head zone-cn"><i></i>中国</div>
     <div class="quote-card" data-idx="上证指数">
       <div class="quote-main">
         <div class="quote-name"><span class="quote-dot sse"></span>上证指数</div>
@@ -238,6 +254,18 @@
         <div class="spark-axis" data-mkt="hk"><span>09:30</span><span>12:00/13:00</span><span>16:00</span></div>
       </div>
     </div>
+    <div class="quote-card" data-idx="黄金9999">
+      <div class="quote-main">
+        <div class="quote-name"><span class="quote-dot au"></span>黄金Au99.99</div>
+        <div class="quote-price" id="price-au">—</div>
+        <div class="quote-change" id="change-au">—</div>
+      </div>
+      <div class="quote-chart">
+        <svg class="spark" id="spark-au" viewBox="0 0 120 40" preserveAspectRatio="none" aria-hidden="true"></svg>
+        <div class="spark-axis" data-mkt="au"><span>20:00</span><span>09:00</span><span>15:30</span></div>
+      </div>
+    </div>
+    <div class="zone-head zone-ap"><i></i>亚太</div>
     <div class="quote-card" data-idx="韩国综合">
       <div class="quote-main">
         <div class="quote-name"><span class="quote-dot kr"></span>韩国综合</div>
@@ -258,17 +286,6 @@
       <div class="quote-chart">
         <svg class="spark" id="spark-jp" viewBox="0 0 120 40" preserveAspectRatio="none" aria-hidden="true"></svg>
         <div class="spark-axis" data-mkt="jp"><span>08:00</span><span>10:30/11:30</span><span>14:30</span></div>
-      </div>
-    </div>
-    <div class="quote-card" data-idx="黄金9999">
-      <div class="quote-main">
-        <div class="quote-name"><span class="quote-dot au"></span>黄金Au99.99</div>
-        <div class="quote-price" id="price-au">—</div>
-        <div class="quote-change" id="change-au">—</div>
-      </div>
-      <div class="quote-chart">
-        <svg class="spark" id="spark-au" viewBox="0 0 120 40" preserveAspectRatio="none" aria-hidden="true"></svg>
-        <div class="spark-axis" data-mkt="au"><span>20:00</span><span>09:00</span><span>15:30</span></div>
       </div>
     </div>
   </div>
@@ -814,9 +831,7 @@ document.querySelectorAll('.chart-block').forEach(block => {
     'box-shadow:0 1px 4px rgba(4,120,87,.4)}' +
     '.rt-badge.open::before{content:"";display:inline-block;width:6px;height:6px;' +
     'border-radius:50%;background:#fff;margin-right:4px;vertical-align:1px;' +
-    'animation:rtPulse 1.4s ease-in-out infinite}' +
-    '@keyframes rtPulse{0%,100%{opacity:1}50%{opacity:.25}}' +
-    '@media (prefers-reduced-motion:reduce){.rt-badge.open::before{animation:none}}' +
+    'opacity:var(--rt-o,1);transform:scale(var(--rt-s,1))}' +
     '.rt-badge.closed{background:rgba(100,116,139,.12);color:#64748b;' +
     'border-color:rgba(100,116,139,.35)}' +
     '.rt-ny{font-size:10px;font-weight:600;padding:1px 6px;border-radius:4px;margin-left:2px;' +
@@ -1221,6 +1236,19 @@ document.querySelectorAll('.chart-block').forEach(block => {
     pollTqQuotes();                 // 韩日价格不等分时翻日（日经换日常迟一个多小时）
     MAP.forEach(minutePull);
   }, 60000);
+  // 实时圆点统一呼吸：所有开市卡共用同一只时钟（CSS 动画各元素起拍时刻不同、相位参差，
+  // 看着难受）。余弦呼吸每 60ms 算一步，缩放/透明度写进全局 CSS 变量，所有 ::before 同步跟读。
+  (function () {
+    const P = 1600;   // 呼吸周期（毫秒）
+    const tick = () => {
+      const f = 0.5 - 0.5 * Math.cos(2 * Math.PI * (performance.now() % P) / P);
+      const st = document.documentElement.style;
+      st.setProperty('--rt-s', (1 - 0.45 * f).toFixed(3));   // 缩放 1 → 0.55
+      st.setProperty('--rt-o', (1 - 0.6 * f).toFixed(3));    // 亮度 1 → 0.4
+    };
+    tick();
+    setInterval(tick, 60);
+  })();
   MAP.forEach(clearStaleBaked);          // 进页面先体检一次：清掉上一交易日的烤库全天线
   MAP.forEach(m => minutePull(m, 1));   // 进页面立即对齐一次；收市也补拉一次完整分时（仅此一次）
   pollTqQuotes();                        // 进页面立即修一次韩日价格（烤库值可能是上一交易日的）
