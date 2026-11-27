@@ -891,10 +891,12 @@ document.querySelectorAll('.chart-block').forEach(block => {
       : m.mkt === 'kr' ? krOpen() : m.mkt === 'jp' ? jpOpen() : cnOpen();
   }
   function mktSlots(m) { return m.mkt === 'us' ? 390 : m.mkt === 'hk' ? 330 : m.mkt === 'au' ? 780 : m.mkt === 'kr' ? 390 : m.mkt === 'jp' ? 330 : 240; }
-  // 「今日当前交易时段已经走了多少分钟」——开盘换日检测的分母。东财换日有滞后：刚
-  // 开盘时常还端着上一交易日的全天序列；烤库分时同样是抓取那天的全天线。序列点数
-  // 远超这个值（+10 容余，含港美股集合竞价多出的几行）时，这条线必是旧日线，
-  // 今日盘中不能拿它顶当天的线。按市场分段累计（A股/港股跳过午休、黄金跨零点）。
+  // 「今天这条分时线此刻应当已有的点数」——开盘换日检测的分母（全天口径）。东财换日
+  // 有滞后：刚开盘时常还端着上一交易日的全天序列；烤库分时同样是抓取那天的全天线。
+  // 序列点数远超这个值（+10 容余，含港美股集合竞价多出的几行）时，这条线必是旧日线。
+  // 除盘中分钟数外，午休、日盘收后等间歇也给出「今日应已有」的额度（上午已走满/全天），
+  // 让体检在这些时段照样能识破旧全天线；开盘前额度没用场，由 todayLineActive 总闸挡住
+  // （周末与次晨开盘前，上一交易日的全天线正是该显示的，不体检）。
   function sessionElapsedMin(m) {
     const tzMin = tz => {
       const d = new Date(new Date().toLocaleString('en-US', { timeZone: tz }));
@@ -904,27 +906,64 @@ document.querySelectorAll('.chart-block').forEach(block => {
     switch (m.mkt) {
       case 'us': t = tzMin('America/New_York'); return Math.min(Math.max(t - 570, 0), 390);
       case 'hk': t = tzMin('Asia/Hong_Kong');
-        return t >= 570 && t < 720 ? t - 570 : t >= 780 && t < 960 ? 150 + t - 780 : 330;
+        if (t >= 570 && t < 720) return t - 570;
+        if (t >= 720 && t < 780) return 150;          // 港股午休：上午 09:30-12:00 已走满
+        if (t >= 780 && t < 960) return 150 + t - 780;
+        return 330;
       case 'kr': t = tzMin('Asia/Seoul'); return Math.min(Math.max(t - 540, 0), 390);
       case 'jp': t = tzMin('Asia/Tokyo');
-        return t >= 540 && t < 690 ? t - 540 : t >= 750 && t < 930 ? 150 + t - 750 : 330;
+        if (t >= 540 && t < 690) return t - 540;
+        if (t >= 690 && t < 750) return 150;          // 日股午休
+        if (t >= 750 && t < 930) return 150 + t - 750;
+        return 330;
       case 'au':   // 黄金：今天这条线从昨夜 20:00 起算（夜盘跨零点），日盘按墙钟（东财含午休行）
         t = tzMin('Asia/Shanghai');
         if (t >= 540 && t < 930) return 390 + t - 540;
-        if (t >= 1200) return t - 1200;
+        if (t >= 1200) return Math.min(t - 1200, 390);
         if (t < 150) return 240 + t;
-        return -1;
-      default:     // A 股（东财序列不含午休行）
-        t = tzMin('Asia/Shanghai');
+        if (t < 540) return 390;                      // 夜盘已收、日盘未开：今天已有昨夜整段
+        return 781;                                   // 日盘已收、夜盘未开：全天已走满
+      default:     // A 股（东财序列不含午休行）——午休与盘后也给「今日已有额度」，
+        t = tzMin('Asia/Shanghai');                   // 换日体检在这些间歇照样能识破旧全天线
         if (t >= 570 && t < 690) return t - 570;
+        if (t >= 690 && t < 780) return 121;          // 午休：上午 09:30-11:30 已走满
         if (t >= 780 && t < 900) return 120 + t - 780;
-        return -1;
+        return 240;
     }
   }
-  // 开盘换日体检：把「点数远超今日时段已走分钟」的上一交易日线清掉——今天的分时
-  // 从最左侧第一根分钟重新起画。收市时不调用（那时上一交易日的全天线正是该显示的）。
+  // 「今天这条分时线是否已在生成」——开盘换日体检的总闸。开市中必在；A股/港股午休、
+  // 日股午休、金交所夜盘已收而日盘未开等间歇里今天这条线也已有半截，旧全天线同样要让位；
+  // 周末与次晨开盘前不在——那时上一交易日的全天线正是该显示的。韩股/日股按首尔/东京
+  // 时钟（其分时行从各自开盘起画），美股按纽约时钟，A 股/港股/黄金按上海时钟。
+  function todayLineActive(m) {
+    const tz = m.mkt === 'us' ? 'America/New_York' : m.mkt === 'hk' ? 'Asia/Hong_Kong'
+      : m.mkt === 'kr' ? 'Asia/Seoul' : m.mkt === 'jp' ? 'Asia/Tokyo' : 'Asia/Shanghai';
+    const d = new Date(new Date().toLocaleString('en-US', { timeZone: tz }));
+    const wd = d.getDay(), t = d.getHours() * 60 + d.getMinutes();
+    const wk = wd >= 1 && wd <= 5;
+    if (m.mkt === 'kr' || m.mkt === 'jp') return wk && t >= 540;
+    if (m.mkt === 'us') return wk && t >= 570;
+    if (m.mkt === 'au') {
+      if (wd === 0) return false;                      // 周日全天无今天的线
+      if (t < 150) return wd === 6 || wd >= 2;         // 凌晨夜盘延续（周六凌晨=周五夜的尾巴；周一凌晨无）
+      if (t < 540) return wd >= 2 && wd <= 5;          // 周二~五凌晨收市后：今天的线已有昨夜整段
+      return wk;                                       // 周一~五：日盘起、日盘收后、20:00 起新夜盘
+    }
+    return wk && t >= 570;                             // A 股 / 港股：09:30 起当天算「已在生成」
+  }
+  // 上海日期 YYYY-MM-DD：东财各路分时行的行首时间与腾讯 minute/query 的 date 字段都是
+  // 东八区的钟（美股分时行同样北京时间、横跨北京零点），数据行自带的日期与它对表即可
+  // 判这条线属于今天还是上一交易日。
+  function shToday() {
+    const d = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Shanghai' }));
+    const p2 = n => ('0' + n).slice(-2);
+    return d.getFullYear() + '-' + p2(d.getMonth() + 1) + '-' + p2(d.getDate());
+  }
+  // 开盘换日体检：把「今天的线已在生成、而画面点数远超今日应有点数」的上一交易日线
+  // 清掉——今天的分时从最左侧第一根分钟重新起画。周末与次晨开盘前不调用（上一交易日
+  // 的全天线正是该显示的）；午休、日盘收后等间歇照常体检（今天已有半截线）。
   function clearStaleBaked(m) {
-    if (!mktOpen(m)) return;
+    if (!todayLineActive(m)) return;
     const pts = (window.__SPARK_PTS || {})[m.sparkId];
     const avail = sessionElapsedMin(m);
     if (pts && avail >= 0 && pts.length > avail + 10) {
@@ -1118,23 +1157,31 @@ document.querySelectorAll('.chart-block').forEach(block => {
         .then(j => { if (count(j) < 2) throw 0; return j; })
     ), Promise.reject());
   }
-  // 兼容三种返回形态：东财 trends2 的 data.trends=[“日期 时间,价,…”]、东财 kline 的
-  // data.klines=[“日期 时间,收盘价,…”]（/trends 与 kline 行的取值列同为第 2 列）、
-  // 腾讯 minute/query 的 data[代码].data.data=[“0930 价 量 额”,…]
+  // 兼容三种返回形态：东财 trends2 的 data.trends=[“2026-11-27 09:30,价,…”]、东财 kline 的
+  // data.klines=[“2026-11-27 11:44,价,…”]（两路行首都带北京时间，取值列同为第 2 列）、
+  // 腾讯 minute/query 的 data[代码].data.data=[“0930 价 量 额”,…]（日期在旁路 data.date）。
+  // 返回 { pts: 点位序列, day: 行自带的交易日（YYYY-MM-DD，取不到为空串） }，日期是
+  // 换日体检判旧的铁证（见 minutePull）。
   function parseTrends(j, m) {
     const d = (j && j.data) || {};
     const out = [];
+    const rowDay = row => (String(row).match(/^\d{4}-\d{2}-\d{2}/) || [''])[0];
+    let day = '';
     if (Array.isArray(d.trends)) {
+      if (d.trends.length) day = rowDay(d.trends[d.trends.length - 1]);
       d.trends.forEach(row => {
         const v = parseFloat(String(row).split(',')[1]);
         if (isFinite(v)) out.push(v);
       });
     } else if (Array.isArray(d.klines)) {
+      if (d.klines.length) day = rowDay(d.klines[d.klines.length - 1]);
       d.klines.forEach(row => {
         const v = parseFloat(String(row).split(',')[1]);
         if (isFinite(v)) out.push(v);
       });
     } else if (m.tcode && d[m.tcode]) {
+      const dd = (d[m.tcode].data || {}).date;
+      if (dd && /^\d{8}$/.test(String(dd))) day = dd.slice(0, 4) + '-' + dd.slice(4, 6) + '-' + dd.slice(6, 8);
       let rows = (d[m.tcode].data || {}).data;
       if (typeof rows === 'string') rows = rows.split(';');
       (rows || []).forEach(row => {
@@ -1142,7 +1189,7 @@ document.querySelectorAll('.chart-block').forEach(block => {
         if (isFinite(v)) out.push(v);
       });
     }
-    return out;
+    return { pts: out, day: day };
   }
   // 分时迷你线：每 60 秒按各自市场开盘状态增量刷新（报价接口只有快照，分时序列走 Worker /trends）
   // tq 烤库兜底：日经225/韩国综合的实时链路全断（东财封波）时，收市态直接用烤库分时
@@ -1191,15 +1238,22 @@ document.querySelectorAll('.chart-block').forEach(block => {
   function minutePull(m, once) {
     const open = mktOpen(m);
     paintTqFromBaked(m);
-    // 开市逐分钟补帧；收市仅进页面时补拉一次（拿到比静态底图更完整的全天序列才采用），此后保持画面
+    // 开市逐分钟补帧；非开市仅进页面时补拉一次（此后保持画面，60 秒轮询不再打扰）
     if (!open) { if (!once || m._closed) return; m._closed = 1; }
     fetchTrends(m)
       .then(j => {
-        const pts = parseTrends(j, m);
-        // 开盘换日体检：东财换日有滞后，刚开盘可能仍返回上一交易日的全天序列——
-        // 点数远超今日时段已走分钟即判旧线，弃用，等今天的点从最左侧起画
-        const avail = sessionElapsedMin(m);
-        if (open && avail >= 0 && pts.length > avail + 10) return;
+        const parsed = parseTrends(j, m);   // { pts: 点位序列, day: 行自带交易日（可空） }
+        const pts = parsed.pts;
+        const act = todayLineActive(m);     // 今天这条线已在生成（开市/午休/日盘收后…）
+        const avail = sessionElapsedMin(m); // 全天口径：午休、盘后间歇也给出「今日应有点数」
+        const todayStr = shToday();
+        // 开盘换日体检（升级）：上一交易日的线在「今天这条线已在生成」的任何时段都不得
+        // 顶着——判据①点数远超今日应有点数（原规则，现覆盖午休/盘后间歇）；②行自带
+        // 日期≠今天（日盘收后点数打平时的唯一铁证；美股分时行跨北京零点、东财美股序列
+        // 滞后到下个美盘才翻新，②对美股停用）。act=false（周末/次晨开盘前）两条全不
+        // 启用——那时上一交易日的全天线正是该显示的
+        if (act && avail >= 0 && pts.length > avail + 10) return;
+        if (act && m.us !== 1 && parsed.day && parsed.day !== todayStr) return;
         // 画线基准（虚线）：韩日快照刚更新过时用快照带回的昨收——东财分时换日
         // 滞后期间，烤库/分时自带的昨收是上一交易日的，位置会画错
         let ref = (m.__snapPre && m.__snapAt && Date.now() - m.__snapAt < 150000)
@@ -1212,13 +1266,15 @@ document.querySelectorAll('.chart-block').forEach(block => {
           const lo = Math.min.apply(null, pts), hi = Math.max.apply(null, pts);
           if (ref < lo * 0.85 || ref > hi * 1.15) ref = null;
         }
-        // 收市补拉只有在比当前画面更完整（全天 > 半天）时才替换，避免画面来回跳变
         if (pts.length >= 2) {
-          // 收市补拉只有在比当前画面更完整（全天 > 半天）时才替换，避免画面来回跳变
-          if (open || pts.length > curLen) {
+          // 采用规则：开市照常画；非开市仅当新线比画面更完整，或画面还是上一交易日的
+          // 旧线而今天已有新线生成（如 A 股午休刷新页面时烤库挂着昨日全天线）才替换，
+          // 避免画面来回跳变
+          if (open || pts.length > curLen || (act && m.__day !== todayStr)) {
             drawSpark(m.sparkId, pts, ref, mktSlots(m));
             window.__SPARK_LEN[m.sparkId] = pts.length;
             window.__SPARK_PTS[m.sparkId] = pts;
+            m.__day = parsed.day || '';
           }
           // tq 指数（日经225/韩国综合）：快照通道每分钟都在刷价格数字，这里只在快照
           // 没接通时才用分时末点上卡——否则两条通道值有秒级差异，数字会来回跳
