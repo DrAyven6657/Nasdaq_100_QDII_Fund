@@ -25,11 +25,12 @@ jobs:
       - name: 运行抓取脚本
         run: python scrape.py
 
-      - name: 提交 data.json / data.js
+      - name: 提交数据（public + 根目录）
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add public
+          cp public/data.json public/data.js public/kline_data.js .
+          git add public data.json data.js kline_data.js
           if git diff --cached --quiet; then
             echo "数据无变化，跳过提交"
           else
